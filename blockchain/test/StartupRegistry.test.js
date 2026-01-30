@@ -1,5 +1,6 @@
-const { expect } = require("chai");
-const { ethers, upgrades } = require("hardhat");
+import { expect } from "chai";
+import hre from "hardhat";
+const { ethers, upgrades } = hre;
 
 describe("StartupRegistry", function () {
     let StartupRegistry;
