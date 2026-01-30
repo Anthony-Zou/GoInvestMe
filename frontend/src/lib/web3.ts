@@ -25,6 +25,8 @@ export const CONTRACT_ADDRESSES = {
   sepolia: appConfig.contracts.sepolia,
   mainnet: appConfig.contracts.mainnet,
   current: appConfig.contracts.current, // Active contract based on selected network
+  investorRegistry: appConfig.contracts.investorRegistry,
+  startupRegistry: appConfig.contracts.startupRegistry,
 } as const
 
 /**

@@ -1,0 +1,169 @@
+import { expect } from "chai";
+import hre from "hardhat";
+const { ethers, upgrades } = hre;
+
+describe("TokenizedSAFE", function () {
+    let TokenizedSAFE;
+    let safe;
+    let MockERC20;
+    let usdc;
+    let MockInvestorRegistry;
+    let registry;
+    let owner, founder, investor1, investor2, unverifiedInvestor;
+
+    const NAME = "TechCo SAFE";
+    const SYMBOL = "SAFE-TCH";
+    const CAP = ethers.parseUnits("1000000", 6); // 1M USDC
+    const DISCOUNT = 2000; // 20%
+    const MIN_INVEST = ethers.parseUnits("1000", 6); // 1000 USDC
+    const MAX_INVEST = ethers.parseUnits("50000", 6); // 50k USDC
+    const DURATION = 30 * 24 * 60 * 60; // 30 days
+
+    beforeEach(async function () {
+        [owner, founder, investor1, investor2, unverifiedInvestor] = await ethers.getSigners();
+
+        // Deploy Mock USDC
+        MockERC20 = await ethers.getContractFactory("MockERC20");
+        usdc = await MockERC20.deploy("USD Coin", "USDC");
+        await usdc.waitForDeployment();
+
+        // Distribute USDC
+        await usdc.mint(investor1.address, ethers.parseUnits("100000", 6));
+        await usdc.mint(investor2.address, ethers.parseUnits("100000", 6));
+        await usdc.mint(unverifiedInvestor.address, ethers.parseUnits("100000", 6));
+
+        // Deploy Mock Investor Registry
+        MockInvestorRegistry = await ethers.getContractFactory("MockInvestorRegistry");
+        registry = await MockInvestorRegistry.deploy();
+        await registry.waitForDeployment();
+
+        // Verify investors
+        await registry.setVerified(investor1.address, true);
+        await registry.setVerified(investor2.address, true);
+        await registry.setVerified(unverifiedInvestor.address, false);
+
+        // Deploy TokenizedSAFE
+        TokenizedSAFE = await ethers.getContractFactory("TokenizedSAFE");
+        safe = await upgrades.deployProxy(TokenizedSAFE, [
+            NAME,
+            SYMBOL,
+            await usdc.getAddress(),
+            await registry.getAddress(),
+            founder.address,
+            CAP,
+            DISCOUNT,
+            MIN_INVEST,
+            MAX_INVEST,
+            DURATION
+        ], {
+            initializer: "initialize",
+            kind: "uups",
+        });
+        await safe.waitForDeployment();
+
+        // Approve USDC spending
+        await usdc.connect(investor1).approve(await safe.getAddress(), ethers.MaxUint256);
+        await usdc.connect(investor2).approve(await safe.getAddress(), ethers.MaxUint256);
+        await usdc.connect(unverifiedInvestor).approve(await safe.getAddress(), ethers.MaxUint256);
+    });
+
+    describe("Initialization", function () {
+        it("Should initialize with correct parameters", async function () {
+            expect(await safe.name()).to.equal(NAME);
+            expect(await safe.symbol()).to.equal(SYMBOL);
+            expect(await safe.usdcToken()).to.equal(await usdc.getAddress());
+            expect(await safe.founderAddress()).to.equal(founder.address);
+            expect(await safe.valuationCap()).to.equal(CAP);
+        });
+
+        it("Should grant ADMIN_ROLE to deployer", async function () {
+            const ADMIN_ROLE = await safe.ADMIN_ROLE();
+            expect(await safe.hasRole(ADMIN_ROLE, owner.address)).to.be.true;
+        });
+    });
+
+    describe("Investment", function () {
+        it("Should allow verified investor to invest", async function () {
+            const amount = ethers.parseUnits("5000", 6);
+
+            await expect(safe.connect(investor1).invest(amount))
+                .to.emit(safe, "InvestmentReceived")
+                .withArgs(investor1.address, amount, amount);
+
+            expect(await safe.balanceOf(investor1.address)).to.equal(amount);
+            expect(await usdc.balanceOf(await safe.getAddress())).to.equal(amount);
+        });
+
+        it("Should reject unverified investor", async function () {
+            const amount = ethers.parseUnits("5000", 6);
+            await expect(
+                safe.connect(unverifiedInvestor).invest(amount)
+            ).to.be.revertedWith("Investor not verified");
+        });
+
+        it("Should enforce minimum investment", async function () {
+            const amount = ethers.parseUnits("500", 6); // Below 1000
+            await expect(
+                safe.connect(investor1).invest(amount)
+            ).to.be.revertedWith("Below min investment");
+        });
+
+        it("Should enforce maximum investment", async function () {
+            const amount = ethers.parseUnits("60000", 6); // Above 50k
+            await expect(
+                safe.connect(investor1).invest(amount)
+            ).to.be.revertedWith("Exceeds max investment");
+        });
+
+        it("Should accumulate investments up to max cap per user", async function () {
+            const amount1 = ethers.parseUnits("30000", 6);
+            const amount2 = ethers.parseUnits("30000", 6); // Total 60k, exceeds 50k
+
+            await safe.connect(investor1).invest(amount1);
+
+            await expect(
+                safe.connect(investor1).invest(amount2)
+            ).to.be.revertedWith("Exceeds max investment");
+        });
+    });
+
+    describe("Fund Management", function () {
+        beforeEach(async function () {
+            await safe.connect(investor1).invest(ethers.parseUnits("10000", 6));
+        });
+
+        it("Should allow admin to withdraw funds to founder", async function () {
+            const initialFounderBalance = await usdc.balanceOf(founder.address);
+            const contractBalance = await usdc.balanceOf(await safe.getAddress());
+
+            await expect(safe.connect(owner).withdrawFunds())
+                .to.emit(safe, "FundsWithdrawn")
+                .withArgs(founder.address, contractBalance);
+
+            expect(await usdc.balanceOf(founder.address)).to.equal(initialFounderBalance + contractBalance);
+            expect(await usdc.balanceOf(await safe.getAddress())).to.equal(0);
+        });
+
+        it("Should reject withdrawal by non-admin", async function () {
+            await expect(
+                safe.connect(investor1).withdrawFunds()
+            ).to.be.reverted;
+        });
+    });
+
+    describe("Pausability", function () {
+        it("Should pause and unpause investment", async function () {
+            await safe.pause();
+
+            await expect(
+                safe.connect(investor1).invest(ethers.parseUnits("1000", 6))
+            ).to.be.revertedWithCustomError(safe, "EnforcedPause");
+
+            await safe.unpause();
+
+            await expect(
+                safe.connect(investor1).invest(ethers.parseUnits("1000", 6))
+            ).to.not.be.reverted;
+        });
+    });
+});

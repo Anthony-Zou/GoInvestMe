@@ -38,6 +38,8 @@ export interface AppConfig {
     sepolia: string | null;
     mainnet: string | null;
     current: string;
+    investorRegistry: string;
+    startupRegistry: string;
   };
 
   // RPC
@@ -290,6 +292,8 @@ function loadConfig(): AppConfig {
       sepolia: sepoliaAddress,
       mainnet: mainnetAddress,
       current: currentContract,
+      investorRegistry: process.env.NEXT_PUBLIC_INVESTOR_REGISTRY_ADDRESS || (network === 'sepolia' ? '0x54Ee6D45Ca93Cb58A6eBd07f8D87be6D9C9F6c12' : ''),
+      startupRegistry: process.env.NEXT_PUBLIC_STARTUP_REGISTRY_ADDRESS || (network === 'sepolia' ? '0xE4a56B8F0EEabDf2b10da8f04bBeE249bC1411b9' : ''),
     },
 
     rpc: {
