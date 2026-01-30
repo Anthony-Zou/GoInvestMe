@@ -1,4 +1,4 @@
-const { ethers, upgrades } = require("hardhat");
+import { ethers, upgrades } from "hardhat";
 
 async function main() {
     console.log("Deploying InvestorRegistry to local network...");
