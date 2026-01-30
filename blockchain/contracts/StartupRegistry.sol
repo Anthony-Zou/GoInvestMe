@@ -4,6 +4,22 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
+
+interface ITokenizedSAFE {
+    function initialize(
+        string memory name,
+        string memory symbol,
+        address _usdcToken,
+        address _investorRegistry,
+        address _founder,
+        uint256 _valuationCap,
+        uint256 _discountRate,
+        uint256 _minInvestment,
+        uint256 _maxInvestment,
+        uint256 _roundDuration
+    ) external;
+}
 
 /**
  * @title StartupRegistry
@@ -50,6 +66,13 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
     event SAFEContractAdded(address indexed startupId, address indexed safeContract);
     event StartupDeactivated(address indexed startupId);
     event StartupReactivated(address indexed startupId);
+    event RoundCreated(address indexed startupId, address indexed roundAddress, uint256 cap);
+    event ProtocolConfigUpdated(address safeImpl, address usdc, address investorReg);
+
+    // Factory Configuration
+    address public safeImplementation;
+    address public usdcToken;
+    address public investorRegistry;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -309,6 +332,72 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
     {
         bytes32 nameHash = keccak256(abi.encodePacked(_companyName));
         return nameToStartup[nameHash];
+    }
+
+    /**
+     * @notice Configure protocol addresses (ADMIN_ROLE only)
+     */
+    function setProtocolConfig(
+        address _safeImplementation,
+        address _usdcToken,
+        address _investorRegistry
+    ) external onlyRole(ADMIN_ROLE) {
+        safeImplementation = _safeImplementation;
+        usdcToken = _usdcToken;
+        investorRegistry = _investorRegistry;
+        emit ProtocolConfigUpdated(_safeImplementation, _usdcToken, _investorRegistry);
+    }
+
+    /**
+     * @notice Create a new funding round (SAFE)
+     * @param _startupId Startup identifier
+     * @param _valuationCap Valuation cap
+     * @param _discountRate Discount rate (bps)
+     * @param _minInvestment Min investment
+     * @param _maxInvestment Max investment
+     * @param _roundDuration Duration in seconds
+     */
+    function createRound(
+        address _startupId,
+        uint256 _valuationCap,
+        uint256 _discountRate,
+        uint256 _minInvestment,
+        uint256 _maxInvestment,
+        uint256 _roundDuration
+    ) external returns (address roundAddress) {
+        require(isRegistered[_startupId], "Startup not registered");
+        require(startups[_startupId].founderAddress == msg.sender, "Not founder");
+        require(startups[_startupId].isActive, "Startup not active");
+        require(startups[_startupId].kybVerified, "KYB not verified");
+        require(safeImplementation != address(0), "SAFE impl not set");
+
+        // Clone the SAFE implementation
+        roundAddress = Clones.clone(safeImplementation);
+
+        // Derive name/symbol (e.g., "Company SAFE", "SAFE-CO")
+        string memory name = string(abi.encodePacked(startups[_startupId].companyName, " SAFE"));
+        string memory symbol = "SAFE"; // Simplified for now
+
+        // Initialize the new SAFE
+        ITokenizedSAFE(roundAddress).initialize(
+            name,
+            symbol,
+            usdcToken,
+            investorRegistry,
+            msg.sender, // Founder is the admin of the SAFE
+            _valuationCap,
+            _discountRate,
+            _minInvestment,
+            _maxInvestment,
+            _roundDuration
+        );
+
+        // Track the round
+        startups[_startupId].safeContracts.push(roundAddress);
+        emit SAFEContractAdded(_startupId, roundAddress);
+        emit RoundCreated(_startupId, roundAddress, _valuationCap);
+
+        return roundAddress;
     }
 
     /**

@@ -203,4 +203,60 @@ describe("StartupRegistry", function () {
             expect(await upgraded.getAddress()).to.equal(await registry.getAddress());
         });
     });
+    describe("Factory Functionality", function () {
+        let safeImplAddress;
+        let usdcAddress;
+        let investorRegistryAddress;
+        let startupId;
+
+        beforeEach(async function () {
+            // Deploy dependencies
+            const MockERC20 = await ethers.getContractFactory("MockERC20");
+            const usdc = await MockERC20.deploy("USDC", "USDC");
+            usdcAddress = await usdc.getAddress();
+
+            const MockInvestorRegistry = await ethers.getContractFactory("MockInvestorRegistry");
+            const invReg = await MockInvestorRegistry.deploy();
+            investorRegistryAddress = await invReg.getAddress();
+
+            const TokenizedSAFE = await ethers.getContractFactory("TokenizedSAFE");
+            const safeImpl = await TokenizedSAFE.deploy(); // Deploy logic only
+            safeImplAddress = await safeImpl.getAddress();
+
+            // Register a verified startup
+            const tx = await registry.connect(founder1).registerStartup("FactoryCo", "ipfs://test");
+            const receipt = await tx.wait();
+            startupId = await registry.getStartupByName("FactoryCo");
+
+            // Verify KYB
+            await registry.connect(kybOperator).setKYBStatus(startupId, true); // Changed to kybOperator
+
+            // Configure Protocol
+            await registry.connect(admin).setProtocolConfig(safeImplAddress, usdcAddress, investorRegistryAddress);
+        });
+
+        it("Should create a new funding round", async function () {
+            const tx = await registry.connect(founder1).createRound(
+                startupId,
+                1000000,
+                2000,
+                1000,
+                50000,
+                86400
+            );
+
+            await expect(tx).to.emit(registry, "RoundCreated");
+
+            const safeContracts = await registry.getSAFEContracts(startupId);
+            expect(safeContracts.length).to.equal(1);
+        });
+
+        it("Should fail if startup is not verified", async function () {
+            await registry.connect(kybOperator).setKYBStatus(startupId, false);
+
+            await expect(registry.connect(founder1).createRound(
+                startupId, 1000000, 2000, 1000, 50000, 86400
+            )).to.be.revertedWith("KYB not verified");
+        });
+    });
 });
