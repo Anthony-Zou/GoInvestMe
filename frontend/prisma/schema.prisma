@@ -1,0 +1,109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  FOUNDER
+  INVESTOR
+  TALENT
+  ADMIN
+}
+
+enum KycStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  walletAddress String    @unique
+  role          UserRole  @default(INVESTOR)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       UserProfile?
+  startups      Startup[]
+  verifications Verification[]
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String?
+  email     String?  @unique
+  bio       String?
+  avatarUrl String?
+  
+  // Socials
+  twitter   String?
+  linkedin  String?
+  github    String?
+}
+
+model Startup {
+  id          String   @id @default(cuid())
+  founderId   String
+  founder     User     @relation(fields: [founderId], references: [id])
+  
+  name        String
+  description String?
+  logoUrl     String?
+  website     String?
+  
+  // Blockchain Data
+  walletAddress String? // Multisig or main wallet
+  contractAddress String? // Registry ID
+  
+  kybStatus   KycStatus @default(NONE)
+  
+  rounds      FundingRound[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FundingRound {
+  id          String   @id @default(cuid())
+  startupId   String
+  startup     Startup  @relation(fields: [startupId], references: [id])
+  
+  // Round Terms
+  name        String   // "Seed", "Series A"
+  cap         Float
+  discount    Float    // In basis points
+  minInvest   Float
+  maxInvest   Float
+  
+  // Blockchain Data
+  contractAddress String? // The deployed SAFE address
+  txHash          String?
+  
+  status      String   @default("DRAFT") // DRAFT, LIVE, CLOSED
+  
+  createdAt   DateTime @default(now())
+}
+
+model Verification {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  type        String    // "KYC" or "KYB"
+  provider    String    // "Persona"
+  providerId  String?   // External reference ID
+  status      KycStatus @default(PENDING)
+  data        Json?     // Webhook payload or metadata
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

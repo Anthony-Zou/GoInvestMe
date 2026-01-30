@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { Header } from "@/components/layout/Header";
+import { Toaster } from 'sonner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GoInvestMe - Decentralized Investment Platform",
-  description: "Connect entrepreneurs with investors through blockchain technology",
+  title: "LaunchPad - Raise faster, Iterate quicker",
+  description: "The On-Chain Operating System for Startup Creation. Connect verified founders, democratised capital, and global talent.",
 };
 
 export default function RootLayout({
@@ -29,7 +31,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          {children}
+          <Header />
+          <main className="min-h-screen">
+            {children}
+          </main>
+          <Toaster position="top-center" />
         </Providers>
       </body>
     </html>

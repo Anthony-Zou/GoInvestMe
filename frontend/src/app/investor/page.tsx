@@ -3,656 +3,407 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAccount } from 'wagmi'
+import { formatEther, parseEther } from 'viem'
 import { ConnectWallet } from '@/components/ConnectWallet'
 import { Button } from '@/components/ui/button'
-import { useCoinInfo, useBuyCoin, useAllEntrepreneurs, useOwnershipPercentage, useGetInvestment, useInvestmentAmount, useInvestorPortfolio } from '@/lib/hooks'
-import { ArrowLeft, Search, TrendingUp, ExternalLink, Wallet } from 'lucide-react'
-import { formatEther } from 'viem'
+import { useEntrepreneurs, useCoinInfo, useBuyCoin, useInvestment, useCoinBalance } from '@/lib/hooks'
+import { Search, TrendingUp, Wallet, ArrowRight, ShieldCheck, Globe, DollarSign, Filter, PieChart } from 'lucide-react'
 
 export default function InvestorPage() {
-  const { address, isConnected } = useAccount()
-  const { entrepreneurs: portfolioEntrepreneurs, isLoading: portfolioLoading } = useInvestorPortfolio(address || '')
-  const { data: allEntrepreneursData, isLoading: entrepreneursLoading } = useAllEntrepreneurs()
-  const entrepreneurs = (allEntrepreneursData as readonly string[]) || []
+  const { isConnected } = useAccount()
+  const { data: entrepreneursData, isLoading: entrepreneursLoading } = useEntrepreneurs()
+  const entrepreneurs = entrepreneursData as string[] | undefined
   const [selectedEntrepreneur, setSelectedEntrepreneur] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [portfolioDetailsAddress, setPortfolioDetailsAddress] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  if (!isClient) return null // Prevent hydration mismatch
 
   if (!isConnected) {
+    // ... (lines 26-48 omitted for brevity, logic remains same)
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ArrowLeft className="h-6 w-6" />
-            GoInvestMe
+      <div className="min-h-screen bg-slate-50 font-sans">
+        <nav className="container mx-auto px-6 py-4 flex justify-between items-center bg-white border-b border-gray-100">
+          <Link href="/" className="flex items-center gap-2 text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            LaunchPad
           </Link>
           <ConnectWallet />
         </nav>
-        
-        <div className="container mx-auto px-4 py-16 text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-8">Investor Portal</h1>
-          <div className="bg-white p-8 rounded-xl shadow-sm border max-w-md mx-auto">
-            <h2 className="text-xl font-semibold mb-4">Connect Your Wallet</h2>
-            <p className="text-gray-600 mb-6">
-              Connect your wallet to explore investment opportunities and manage your portfolio.
+
+        <div className="container mx-auto px-6 py-20 text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-6">Investor Portal</h1>
+          <div className="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 max-w-lg mx-auto">
+            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Welcome, Investor</h2>
+            <p className="text-gray-600 mb-8 leading-relaxed">
+              Connect your wallet to access curated pre-seed deal flow, manage your portfolio, and invest in the future of innovation.
             </p>
-            <ConnectWallet />
+            <div className="flex justify-center">
+              <ConnectWallet />
+            </div>
           </div>
         </div>
       </div>
     )
   }
 
+  // Filter logic (mocked for now, can be real search)
+  const filteredEntrepreneurs = entrepreneurs?.filter((addr: string) =>
+    addr.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-        <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ArrowLeft className="h-6 w-6" />
-          GoInvestMe
-        </Link>
-        <ConnectWallet />
-      </nav>
+    <div className="min-h-screen bg-slate-50 font-sans">
 
-      <div className="container mx-auto px-4 py-8">
+
+      <div className="container mx-auto px-6 py-10">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Investment Opportunities</h1>
-            <p className="text-gray-600">Discover and invest in promising startups</p>
-          </div>
-
-          {/* Search and Filter */}
-          <div className="mb-8">
-            <div className="relative max-w-md">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                Deal Flow
+                <span className="md:hidden inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[10px] font-semibold border border-green-100 align-middle">
+                  <ShieldCheck className="w-3 h-3" /> Verified
+                </span>
+              </h1>
+              <p className="text-gray-600">Discover and invest in curated pre-seed opportunities.</p>
+            </div>
+            <div className="relative w-full md:w-auto min-w-[300px]">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search campaigns..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search rounds, founders, or tags..."
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Available Campaigns */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-xl shadow-sm border">
-                <div className="p-6 border-b">
-                  <h2 className="text-xl font-semibold">Available Campaigns</h2>
+          {/* Stats Overview */}
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <Filter className="h-5 w-5 text-blue-600" />
                 </div>
-                <div className="p-6">
-                  {entrepreneursLoading ? (
-                    <div className="text-center py-12">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Loading campaigns...</p>
-                    </div>
-                  ) : entrepreneurs && entrepreneurs.length > 0 ? (
-                    <div className="space-y-6">
-                      {entrepreneurs.map((entrepreneurAddress: string) => (
-                        <CampaignListItem 
-                          key={entrepreneurAddress} 
-                          entrepreneurAddress={entrepreneurAddress}
-                          onSelect={setSelectedEntrepreneur}
-                          isSelected={selectedEntrepreneur === entrepreneurAddress}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No campaigns available</h3>
-                      <p className="text-gray-600 mb-4">
-                        Check back later for new investment opportunities, or create one as an entrepreneur!
-                      </p>
-                      <Link href="/entrepreneur">
-                        <Button>
-                          Create Campaign
-                        </Button>
-                      </Link>
-                    </div>
-                  )}
-                </div>
+                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Primary</span>
               </div>
+              <p className="text-sm text-gray-500 font-medium">Available Rounds</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                {entrepreneursLoading ? '...' : entrepreneurs?.length || 0}
+              </p>
             </div>
 
-            {/* Investment Panel */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-8">
-                {selectedEntrepreneur ? (
-                  <InvestmentPanel entrepreneurAddress={selectedEntrepreneur} />
-                ) : (
-                  <div className="bg-white rounded-xl shadow-sm border p-6">
-                    <h3 className="text-lg font-semibold mb-4">Select a Campaign</h3>
-                    <p className="text-gray-600 text-sm">
-                      Choose a campaign from the list to see investment details and make an investment.
-                    </p>
-                  </div>
-                )}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                  <PieChart className="h-5 w-5 text-purple-600" />
+                </div>
               </div>
+              <p className="text-sm text-gray-500 font-medium">Portfolio Companies</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                {/* Mocked for demo */}
+                0
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-green-600" />
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 font-medium">Total Invested</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">
+                0.00 ETH
+              </p>
             </div>
           </div>
 
-          {/* Your Portfolio */}
-          <div className="mt-12">
-            <div className="bg-white rounded-xl shadow-sm border">
-              <div className="p-6 border-b">
-                <h2 className="text-xl font-semibold">Your Portfolio</h2>
+          <div className="grid lg:grid-cols-12 gap-8">
+            {/* List of Rounds */}
+            <div className={`${selectedEntrepreneur ? 'lg:col-span-5 hidden lg:block' : 'lg:col-span-12'}`}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Live Rounds</h2>
+                <Button variant="ghost" size="sm" className="text-gray-500">View All</Button>
               </div>
-              <div className="p-6">
-                {portfolioLoading ? (
+
+              <div className="space-y-4">
+                {entrepreneursLoading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading your portfolio...</p>
+                    <p className="text-gray-600">Loading deal flow...</p>
                   </div>
+                ) : filteredEntrepreneurs && filteredEntrepreneurs.length > 0 ? (
+                  filteredEntrepreneurs.map((address) => (
+                    <RoundListItem
+                      key={address}
+                      entrepreneurAddress={address}
+                      onClick={() => setSelectedEntrepreneur(address)}
+                      isSelected={selectedEntrepreneur === address}
+                    />
+                  ))
                 ) : (
-                  <PortfolioDisplay 
-                    investorAddress={address || ''}
-                    entrepreneurs={portfolioEntrepreneurs}
-                    onViewDetails={setPortfolioDetailsAddress}
-                  />
+                  <div className="bg-white rounded-2xl p-12 text-center border border-gray-100 border-dashed">
+                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <TrendingUp className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2">No active rounds</h3>
+                    <p className="text-gray-500 mb-6">
+                      There are currently no open investment rounds matching your criteria.
+                    </p>
+                    <Link href="/founder">
+                      <Button variant="outline">Are you a Founder?</Button>
+                    </Link>
+                  </div>
                 )}
               </div>
             </div>
+
+            {/* Investment Panel (Details) */}
+            {selectedEntrepreneur && (
+              <div className="lg:col-span-7 animate-in slide-in-from-right-4 duration-300">
+                <div className="sticky top-24">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setSelectedEntrepreneur(null)}
+                    className="lg:hidden mb-4 text-gray-600 pl-0 hover:bg-transparent"
+                  >
+                    <ArrowLeftIcon className="w-4 h-4 mr-2" /> Back to List
+                  </Button>
+                  <InvestmentPanel entrepreneurAddress={selectedEntrepreneur} />
+                </div>
+              </div>
+            )}
+
+            {/* Mobile: If selected, hide list (handled by css classes above somewhat, but need explicit mobile handling) */}
+            {selectedEntrepreneur && (
+              <div className="lg:hidden fixed inset-0 bg-white z-50 overflow-y-auto p-6">
+                <Button
+                  variant="ghost"
+                  onClick={() => setSelectedEntrepreneur(null)}
+                  className="mb-4 text-gray-600 pl-0 hover:bg-transparent"
+                >
+                  <ArrowLeftIcon className="w-4 h-4 mr-2" /> Back to Deal Flow
+                </Button>
+                <InvestmentPanel entrepreneurAddress={selectedEntrepreneur} />
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Portfolio Details Modal */}
-      {portfolioDetailsAddress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">Investment Details</h3>
-              <button
-                onClick={() => setPortfolioDetailsAddress(null)}
-                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <PortfolioDetailsContent 
-              entrepreneurAddress={portfolioDetailsAddress} 
-              investorAddress={address || ''} 
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
-function CampaignListItem({ 
-  entrepreneurAddress, 
-  onSelect, 
-  isSelected 
-}: { 
-  entrepreneurAddress: string
-  onSelect: (address: string) => void
-  isSelected: boolean
-}) {
-  const { data: coinData, isLoading, error } = useCoinInfo(entrepreneurAddress)
-  const coinInfo = (coinData as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
+function ArrowLeftIcon({ className }: { className?: string }) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></svg>
+}
 
-  if (isLoading) {
-    return (
-      <div className="border rounded-lg p-6 animate-pulse">
-        <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-        <div className="h-3 bg-gray-200 rounded w-3/4 mb-4"></div>
-        <div className="flex justify-between">
-          <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-3 bg-gray-200 rounded w-1/6"></div>
-        </div>
-      </div>
-    )
-  }
+// Component for list item
+function RoundListItem({ entrepreneurAddress, onClick, isSelected }: { entrepreneurAddress: string, onClick: () => void, isSelected: boolean }) {
+  const { data: coinInfo } = useCoinInfo(entrepreneurAddress)
+  const info = (coinInfo as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
 
-  if (error) {
-    return (
-      <div className="border rounded-lg p-6 border-red-200 bg-red-50">
-        <p className="text-red-600">Campaign by {entrepreneurAddress.slice(0,6)}...{entrepreneurAddress.slice(-4)}: Failed to load data</p>
-        <p className="text-sm text-red-500">{error.message}</p>
-      </div>
-    )
-  }
+  if (!info) return null
 
-  if (!coinInfo) {
-    return (
-      <div className="border rounded-lg p-6 border-yellow-200 bg-yellow-50">
-        <p className="text-yellow-600">Campaign by {entrepreneurAddress.slice(0,6)}...{entrepreneurAddress.slice(-4)}: No data available</p>
-      </div>
-    )
-  }
-
-  const [projectName, description, websiteUrl, totalSupply, pricePerCoin, coinsSold, coinsAvailable] = coinInfo
+  const [projectName, description, , totalSupply, pricePerCoin, coinsSold] = info
+  const progress = (Number(coinsSold) / Number(totalSupply)) * 100
 
   return (
-    <div 
-      className={`border rounded-lg p-6 cursor-pointer transition-all hover:shadow-md ${
-        isSelected ? 'ring-2 ring-blue-500 border-blue-500' : ''
-      }`}
-      onClick={() => onSelect(entrepreneurAddress)}
+    <div
+      onClick={onClick}
+      className={`p-5 rounded-xl border cursor-pointer transition-all hover:shadow-md ${isSelected
+        ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-500'
+        : 'bg-white border-gray-100 hover:border-blue-100'
+        }`}
     >
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">{projectName}</h3>
-          <p className="text-gray-600 text-sm mb-2">{description}</p>
-          <a 
-            href={websiteUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Visit Website <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
+      <div className="flex justify-between items-start mb-2">
+        <h3 className="font-bold text-gray-900 truncate pr-4">{projectName || 'Untitled Project'}</h3>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">SAFE</span>
       </div>
-      
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <p className="text-gray-500">Price per Token</p>
-          <p className="font-semibold">{formatEther(pricePerCoin)} ETH</p>
+      <p className="text-sm text-gray-500 line-clamp-2 mb-4 h-10">{description || 'No description provided.'}</p>
+
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>{formatEther(BigInt(pricePerCoin))} ETH / SAFE</span>
+          <span>{(Number(coinsSold) / Number(totalSupply) * 100).toFixed(0)}% Funded</span>
         </div>
-        <div>
-          <p className="text-gray-500">Available</p>
-          <p className="font-semibold">{coinsAvailable.toString()}/{totalSupply.toString()}</p>
-        </div>
-      </div>
-      
-      <div className="mt-4">
-        <div className="bg-gray-200 rounded-full h-2">
-          <div 
-            className="bg-blue-600 h-2 rounded-full" 
-            style={{ 
-              width: `${Math.max(5, (Number(coinsSold) / Number(totalSupply)) * 100)}%` 
-            }}
+        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-blue-600 h-1.5 rounded-full"
+            style={{ width: `${Math.max(5, progress)}%` }}
           ></div>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          {((Number(coinsSold) / Number(totalSupply)) * 100).toFixed(1)}% funded
-        </p>
       </div>
     </div>
   )
 }
 
 function InvestmentPanel({ entrepreneurAddress }: { entrepreneurAddress: string }) {
-  const [quantity, setQuantity] = useState('')
-  const { data: coinData } = useCoinInfo(entrepreneurAddress)
-  const coinInfo = (coinData as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
-  const { buyCoin, hash, isPending, isConfirming, isSuccess } = useBuyCoin()
+  const { data: coinInfo, error } = useCoinInfo(entrepreneurAddress)
+  const { buyCoin, isPending, isConfirming, isSuccess } = useBuyCoin()
+  const { data: investment } = useInvestment(entrepreneurAddress)
+  const { data: userBalance } = useCoinBalance(entrepreneurAddress)
 
-  if (!coinInfo) return null
+  const [quantity, setQuantity] = useState('1')
 
-  const [projectName, , , , pricePerCoin, , coinsAvailable] = coinInfo
-  const totalCost = quantity ? (BigInt(quantity) * pricePerCoin).toString() : '0'
-
-  const handleInvest = async () => {
-    if (!quantity) return
-    
-    try {
-      await buyCoin(
-        entrepreneurAddress, 
-        BigInt(quantity), 
-        formatEther(BigInt(totalCost))
-      )
-    } catch (error) {
-      console.error('Investment failed:', error)
-    }
-  }
-
-  if (isSuccess) {
+  if (error) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <div className="text-center">
-          <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Investment Successful!</h3>
-          <p className="text-gray-600 text-sm mb-4">
-            Your investment in {projectName} has been confirmed on the blockchain.
-          </p>
-          
-          {hash && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600 mb-2">Transaction Hash:</p>
-              <p className="text-xs font-mono bg-white p-2 rounded border break-all mb-2">
-                {hash}
-              </p>
-              <a
-                href={`https://sepolia.etherscan.io/tx/${hash}`}
-                target="__blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium"
-              >
-                View on Etherscan
-                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-          )}
-        </div>
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+        <p className="text-red-600 font-medium">Failed to load round details</p>
+        <p className="text-sm text-red-500 mt-2">{error.message}</p>
       </div>
     )
   }
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm border p-6">
-      <h3 className="text-lg font-semibold mb-4">Invest in {projectName}</h3>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Number of Tokens
-          </label>
-          <input
-            type="number"
-            min="1"
-            max={coinsAvailable.toString()}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            placeholder="Enter amount"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Max: {coinsAvailable.toString()} tokens available
-          </p>
-        </div>
-        
-        {quantity && (
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="flex justify-between text-sm mb-2">
-              <span>Token Price:</span>
-              <span>{formatEther(pricePerCoin)} ETH</span>
-            </div>
-            <div className="flex justify-between text-sm mb-2">
-              <span>Quantity:</span>
-              <span>{quantity} tokens</span>
-            </div>
-            <div className="flex justify-between font-semibold border-t pt-2">
-              <span>Total Cost:</span>
-              <span>{formatEther(BigInt(totalCost))} ETH</span>
-            </div>
-          </div>
-        )}
-        
-        <Button
-          onClick={handleInvest}
-          disabled={!quantity || isPending || isConfirming || Number(quantity) > Number(coinsAvailable)}
-          className="w-full"
-        >
-          {isPending ? 'Preparing...' : isConfirming ? 'Confirming...' : 'Invest Now'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function PortfolioItem({ investment, investorAddress, onViewDetails }: { 
-  investment: { entrepreneurAddress: string; balance: bigint };
-  investorAddress: string;
-  onViewDetails: (address: string) => void;
-}) {
-  const { data: coinData } = useCoinInfo(investment.entrepreneurAddress)
-  const coinInfo = (coinData as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
-  const { data: ownershipPercentage } = useOwnershipPercentage(investment.entrepreneurAddress, investorAddress)
-  
   if (!coinInfo) {
     return (
-      <div className="border rounded-lg p-4 animate-pulse">
-        <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-      </div>
-    )
-  }
-  
-  const [projectName, , , , pricePerCoin] = coinInfo
-  const investmentValue = BigInt(investment.balance) * BigInt(pricePerCoin)
-  
-  return (
-    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <h4 className="font-semibold text-gray-900">{projectName}</h4>
-          <p className="text-gray-600 text-sm">Investment</p>
-        </div>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={() => onViewDetails(investment.entrepreneurAddress)}
-        >
-          View Details
-        </Button>
-      </div>
-      
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Tokens Owned:</span>
-          <span className="font-medium">{investment.balance.toString()}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Current Value:</span>
-          <span className="font-medium">{formatEther(investmentValue)} ETH</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Ownership:</span>
-          <span className="font-medium">{ownershipPercentage?.toFixed(2) || '0.00'}%</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PortfolioDetailsContent({ entrepreneurAddress, investorAddress }: {
-  entrepreneurAddress: string;
-  investorAddress: string;
-}) {
-  const { data: coinData } = useCoinInfo(entrepreneurAddress)
-  const coinInfo = (coinData as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
-  const { data: investmentBalanceData } = useGetInvestment(investorAddress, entrepreneurAddress)
-  const investmentBalance = (investmentBalanceData as bigint) || 0n
-  const { data: ownershipPercentage } = useOwnershipPercentage(entrepreneurAddress, investorAddress)
-  
-  if (!coinInfo || investmentBalance === undefined) {
-    return (
-      <div className="text-center py-8">
+      <div className="bg-white rounded-2xl p-12 text-center border border-gray-100">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading investment details...</p>
+        <p className="text-gray-500">Loading details...</p>
       </div>
     )
   }
-  
-  if (!investmentBalance || investmentBalance === BigInt(0)) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-600">Investment not found</p>
-      </div>
-    )
-  }
-  
-  const [projectName, description, websiteUrl, totalSupply, pricePerCoin, coinsSold] = coinInfo
-  const investmentValue = BigInt(investmentBalance) * BigInt(pricePerCoin)
-  
-  return (
-    <div className="space-y-6">
-      {/* Campaign Info */}
-      <div className="border-b pb-4">
-        <h4 className="text-lg font-semibold text-gray-900 mb-2">{projectName}</h4>
-        <p className="text-gray-600 text-sm mb-3">{description}</p>
-        <a 
-          href={websiteUrl} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1"
-        >
-          Visit Website <ExternalLink className="h-3 w-3" />
-        </a>
-      </div>
-      
-      {/* Investment Summary */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <h5 className="font-semibold mb-3">Your Investment Summary</h5>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-gray-600">Tokens Owned</p>
-            <p className="font-semibold text-lg">{investmentBalance.toString()}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Current Value</p>
-            <p className="font-semibold text-lg">{formatEther(investmentValue)} ETH</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Ownership</p>
-            <p className="font-semibold text-lg">{ownershipPercentage?.toFixed(2) || '0.00'}%</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Token Price</p>
-            <p className="font-semibold text-lg">{formatEther(pricePerCoin)} ETH</p>
-          </div>
-        </div>
-      </div>
-      
-      {/* Campaign Progress */}
-      <div>
-        <h5 className="font-semibold mb-3">Campaign Progress</h5>
-        <div className="space-y-3">
-          <div className="flex justify-between text-sm">
-            <span>Total Supply:</span>
-            <span>{totalSupply.toString()} tokens</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Tokens Sold:</span>
-            <span>{coinsSold.toString()} tokens</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Progress:</span>
-            <span>{((Number(coinsSold) / Number(totalSupply)) * 100).toFixed(1)}%</span>
-          </div>
-          <div className="bg-gray-200 rounded-full h-3">
-            <div 
-              className="bg-blue-600 h-3 rounded-full" 
-              style={{ 
-                width: `${Math.max(2, (Number(coinsSold) / Number(totalSupply)) * 100)}%` 
-              }}
-            ></div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Transaction History Note */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-blue-800 text-sm">
-          <strong>Note:</strong> For detailed transaction history, you can view your investment transactions on the blockchain explorer using your wallet address.
-        </p>
-      </div>
-    </div>
-  )
-}
 
-// New component to handle portfolio display with individual investment checks
-function PortfolioDisplay({ investorAddress, entrepreneurs, onViewDetails }: {
-  investorAddress: string
-  entrepreneurs: string[]
-  onViewDetails: (address: string) => void
-}) {
-  const [hasAnyInvestments, setHasAnyInvestments] = useState(false)
-  const [isChecking, setIsChecking] = useState(true)
-  
-  // Simple check to see if we have any investments
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsChecking(false)
-    }, 2000) // Give time for investment checks to complete
-    
-    return () => clearTimeout(timer)
-  }, [])
-  
+  const [projectName, description, websiteUrl, totalSupply, pricePerCoin, coinsSold, coinsAvailable] = coinInfo as unknown as [string, string, string, bigint, bigint, bigint, bigint]
+
+  const investmentBalance = ((investment as any)?.balance || (investment as any)?.[0] || 0n) as bigint
+  const handleBuy = async () => {
+    try {
+      const totalCostWei = BigInt(quantity) * BigInt(pricePerCoin)
+      await buyCoin(entrepreneurAddress, BigInt(quantity), totalCostWei)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      {entrepreneurs.map((entrepreneurAddress) => (
-        <PortfolioItemWrapper 
-          key={entrepreneurAddress}
-          investorAddress={investorAddress}
-          entrepreneurAddress={entrepreneurAddress}
-          onViewDetails={onViewDetails}
-          onHasInvestment={() => setHasAnyInvestments(true)}
-        />
-      ))}
-      
-      {!isChecking && !hasAnyInvestments && (
-        <div className="text-center py-8">
-          <Wallet className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No investments yet</h3>
-          <p className="text-gray-600 text-sm">
-            Start investing in campaigns to build your portfolio
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="p-8 border-b border-gray-100 bg-gradient-to-br from-white to-slate-50">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">{projectName}</h2>
+            <a
+              href={websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1"
+            >
+              <Globe className="w-4 h-4" /> {websiteUrl}
+            </a>
+          </div>
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 uppercase tracking-wide">
+            Live Round
+          </span>
+        </div>
+        <p className="text-gray-600 leading-relaxed text-lg">{description}</p>
+      </div>
+
+      {/* Metrics */}
+      <div className="grid grid-cols-2 divide-x divide-gray-100 border-b border-gray-100">
+        <div className="p-6 text-center">
+          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">SAFE Price</p>
+          <p className="text-xl font-bold text-gray-900">{formatEther(pricePerCoin)} ETH</p>
+        </div>
+        <div className="p-6 text-center">
+          <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">Raised / Target</p>
+          <p className="text-xl font-bold text-gray-900">
+            {formatEther(BigInt(coinsSold) * BigInt(pricePerCoin))} <span className="text-sm text-gray-400 font-normal">/ {formatEther(BigInt(totalSupply) * BigInt(pricePerCoin))} ETH</span>
           </p>
         </div>
-      )}
-    </div>
-  )
-}
+      </div>
 
-// Component that checks individual investments
-function PortfolioItemWrapper({ investorAddress, entrepreneurAddress, onViewDetails, onHasInvestment }: {
-  investorAddress: string
-  entrepreneurAddress: string
-  onViewDetails: (address: string) => void
-  onHasInvestment: () => void
-}) {
-  const { data: investmentAmountData } = useInvestmentAmount(investorAddress, entrepreneurAddress)
-  const investmentAmount = (investmentAmountData as bigint) || 0n
-  const { data: coinData } = useCoinInfo(entrepreneurAddress)
-  const coinInfo = (coinData as readonly [string, string, string, bigint, bigint, bigint, bigint, bigint, boolean]) || null
-  const { data: ownershipPercentage } = useOwnershipPercentage(entrepreneurAddress, investorAddress)
-  
-  // Notify parent if we have an investment
-  useEffect(() => {
-    if (investmentAmount && investmentAmount > BigInt(0) && coinInfo) {
-      onHasInvestment()
-    }
-  }, [investmentAmount, coinInfo, onHasInvestment])
-  
-  // Only render if there's an actual investment
-  if (!investmentAmount || investmentAmount === BigInt(0) || !coinInfo) {
-    return null
-  }
-  
-  const [projectName, , , , pricePerCoin] = coinInfo
-  const currentValue = BigInt(investmentAmount) * BigInt(pricePerCoin)
-  
-  return (
-    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start mb-3">
-        <div className="flex-1">
-          <h4 className="font-semibold text-gray-900">{projectName}</h4>
-          <p className="text-sm text-gray-600">Investment</p>
-        </div>
-        <button
-          onClick={() => onViewDetails(entrepreneurAddress)}
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium px-3 py-1 rounded-md border border-blue-200 hover:border-blue-300 transition"
-        >
-          View Details
-        </button>
+      <div className="p-8">
+        {isSuccess ? (
+          <div className="bg-green-50 rounded-xl p-8 text-center border border-green-100">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-6 h-6 text-green-600" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Investment Confirmed!</h3>
+            <p className="text-gray-600 mb-6">
+              You have successfully invested in {projectName}. Your SAFE tokens have been transferred to your wallet.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Button
+                variant="outline"
+                onClick={() => window.location.reload()} // Simple reload to reset state for now
+              >
+                Invest More
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Invest in Round</h3>
+              <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
+                <div className="flex justify-between text-sm mb-2 text-gray-500 font-medium">
+                  <span>Allocation</span>
+                  <span>{coinsAvailable.toString()} SAFEs available</span>
+                </div>
+
+                <div className="flex gap-4 items-center">
+                  <div className="flex-1">
+                    <label className="sr-only">Quantity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={coinsAvailable.toString()}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                    />
+                  </div>
+                  <div className="text-lg font-bold text-gray-500">SAFEs</div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+                  <span className="text-gray-600 font-medium">Total Investment</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    {formatEther(BigInt(quantity || 0) * BigInt(pricePerCoin))} ETH
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              size="lg"
+              className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200"
+              onClick={handleBuy}
+              disabled={isPending || isConfirming || !quantity || Number(quantity) <= 0}
+            >
+              {isPending ? 'Processing...' : isConfirming ? 'Confirming Transaction...' : 'Invest Now'}
+            </Button>
+
+            <p className="text-center text-xs text-gray-400">
+              By investing, you agree to the Terms of Service and confirm you are an accredited investor or meet local regulations.
+            </p>
+          </div>
+        )}
       </div>
-      
-      <div className="grid grid-cols-3 gap-4 text-sm">
-        <div>
-          <p className="text-gray-600">Tokens Owned:</p>
-          <p className="font-semibold">{investmentAmount.toString()}</p>
+
+      {/* Portfolio Holdings Footer */}
+      {(investmentBalance > 0n || (userBalance && userBalance > 0n)) && (
+        <div className="bg-gray-50 border-t border-gray-100 p-6">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-white rounded-full border border-gray-200 flex items-center justify-center shadow-sm">
+              <Wallet className="w-5 h-5 text-gray-500" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Your Holdings</p>
+              <p className="text-gray-900 font-medium">
+                You own <span className="font-bold text-blue-600">{(investmentBalance || userBalance || 0n).toString()} SAFEs</span> in this round.
+              </p>
+            </div>
+          </div>
         </div>
-        <div>
-          <p className="text-gray-600">Current Value:</p>
-          <p className="font-semibold">{formatEther(currentValue)} ETH</p>
-        </div>
-        <div>
-          <p className="text-gray-600">Ownership:</p>
-          <p className="font-semibold">{ownershipPercentage?.toFixed(2)}%</p>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

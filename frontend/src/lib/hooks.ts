@@ -60,7 +60,7 @@ export function useBuyCoin() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const contractAddress = useContractAddress()
 
-  const buyCoin = async (entrepreneurAddress: string, quantity: bigint, totalCost: string) => {
+  const buyCoin = async (entrepreneurAddress: string, quantity: bigint, totalCost: bigint) => {
     if (!contractAddress) throw new Error('Contract not deployed on this network')
 
     writeContract({
@@ -68,7 +68,7 @@ export function useBuyCoin() {
       abi: GoInvestMeCoreABI.abi,
       functionName: 'buyCoin',
       args: [entrepreneurAddress as `0x${string}`, quantity],
-      value: parseEther(totalCost)
+      value: totalCost
     })
   }
 
@@ -121,6 +121,11 @@ export function useAllEntrepreneurs() {
   })
 }
 
+// Alias for compatibility
+export function useEntrepreneurs() {
+  return useAllEntrepreneurs()
+}
+
 // Hook to check if entrepreneur has created a coin
 export function useHasCoin(entrepreneurAddress: string) {
   const contractAddress = useContractAddress()
@@ -149,6 +154,23 @@ export function useGetInvestment(investorAddress: string, entrepreneurAddress: s
       enabled: !!contractAddress && !!investorAddress && !!entrepreneurAddress,
     }
   })
+}
+
+// Convenience hook to get investment for current user
+export function useInvestment(entrepreneurAddress: string) {
+  const { address } = useAccount()
+  return useGetInvestment(address || '0x0000000000000000000000000000000000000000', entrepreneurAddress)
+}
+
+// Hook to get only the balance (for compatibility)
+export function useCoinBalance(entrepreneurAddress: string) {
+  const { data } = useInvestment(entrepreneurAddress)
+  // Assuming the contract returns a struct and wagmi returns it as an object-like array or object
+  // If it returns { balance, timestamp }, we return balance.
+  // If data is undefined, return undefined.
+  // We cast to any to avoid strict type issues without ABI types
+  const balance = data ? (data as any).balance || (data as any)[0] : undefined
+  return { data: balance }
 }
 
 // Hook to get specific investment amount between investor and entrepreneur  
