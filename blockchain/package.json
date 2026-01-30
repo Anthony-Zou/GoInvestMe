@@ -12,5 +12,12 @@
     "deploy:local": "hardhat run scripts/deploy.ts --network hardhatMainnet",
     "verify:sepolia": "hardhat verify --network sepolia",
     "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts-upgradeable": "^5.4.0",
+    "@openzeppelin/hardhat-upgrades": "^4.0.0",
+    "hardhat": "^3.1.5"
   }
 }
