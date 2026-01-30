@@ -1,0 +1,313 @@
+# CI/CD Pipeline Configuration
+#
+# This workflow runs on every push and pull request to ensure code quality
+# and automate the build/test/deploy process.
+#
+# Follows 12 Factor App principles:
+# - Factor V: Build, Release, Run (strict separation)
+# - Factor X: Dev/Prod Parity (same build process everywhere)
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '8.x'
+
+jobs:
+  # ============================================================================
+  # LINT JOB: Code quality checks
+  # ============================================================================
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Run TypeScript check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+  # ============================================================================
+  # TEST JOB: Run all tests
+  # ============================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm test
+        env:
+          CI: true
+      
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+        continue-on-error: true
+
+  # ============================================================================
+  # BUILD JOB: Build application
+  # ============================================================================
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Create .env file for build
+        working-directory: frontend
+        run: |
+          cat > .env.production << EOF
+          NEXT_PUBLIC_NETWORK_NAME=sepolia
+          NEXT_PUBLIC_CHAIN_ID=11155111
+          NEXT_PUBLIC_ENABLE_TESTNETS=true
+          NEXT_PUBLIC_SEPOLIA_CONTRACT_ADDRESS=${{ secrets.SEPOLIA_CONTRACT_ADDRESS }}
+          NEXT_PUBLIC_APP_ENV=production
+          NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+          NEXT_PUBLIC_APP_NAME=GoInvestMe
+          NEXT_PUBLIC_ENABLE_ANALYTICS=false
+          NEXT_PUBLIC_ENABLE_ERROR_TRACKING=true
+          NEXT_PUBLIC_ENABLE_PERFORMANCE_MONITORING=true
+          NEXT_PUBLIC_DEBUG_MODE=false
+          NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
+          NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.1
+          EOF
+      
+      - name: Build Next.js application
+        working-directory: frontend
+        run: npm run build
+        env:
+          NODE_ENV: production
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            frontend/.next
+            frontend/public
+          retention-days: 7
+
+  # ============================================================================
+  # HEALTH CHECK: Verify health endpoints
+  # ============================================================================
+  health-check:
+    name: Verify Health Endpoints
+    runs-on: ubuntu-latest
+    needs: [build]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: frontend
+      
+      - name: Start application
+        working-directory: frontend
+        run: |
+          npm run start &
+          echo $! > app.pid
+        env:
+          PORT: 3000
+      
+      - name: Wait for application startup
+        run: |
+          timeout 60 bash -c 'until curl -f http://localhost:3000/api/health; do sleep 2; done'
+      
+      - name: Test health endpoint
+        run: |
+          response=$(curl -s http://localhost:3000/api/health)
+          echo "Health response: $response"
+          status=$(echo $response | jq -r '.status')
+          if [ "$status" != "healthy" ]; then
+            echo "Health check failed!"
+            exit 1
+          fi
+      
+      - name: Test readiness endpoint
+        run: |
+          response=$(curl -s http://localhost:3000/api/ready)
+          echo "Ready response: $response"
+          ready=$(echo $response | jq -r '.ready')
+          if [ "$ready" != "true" ]; then
+            echo "Readiness check failed!"
+            exit 1
+          fi
+      
+      - name: Test status endpoint
+        run: |
+          response=$(curl -s http://localhost:3000/api/status)
+          echo "Status response: $response"
+          status=$(echo $response | jq -r '.status')
+          if [ "$status" != "operational" ]; then
+            echo "Status check failed!"
+            exit 1
+          fi
+      
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f frontend/app.pid ]; then
+            kill $(cat frontend/app.pid) || true
+          fi
+
+  # ============================================================================
+  # DEPLOY PREVIEW: Deploy to Vercel (PR only)
+  # ============================================================================
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: [build, health-check]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to Vercel (Preview)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: frontend
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+  # ============================================================================
+  # DEPLOY PRODUCTION: Deploy to Vercel (main branch only)
+  # ============================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, health-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://goinvestme.vercel.app
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to Vercel (Production)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: frontend
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+      
+      - name: Verify production deployment
+        run: |
+          sleep 10
+          response=$(curl -s https://goinvestme.vercel.app/api/health)
+          status=$(echo $response | jq -r '.status')
+          if [ "$status" != "healthy" ]; then
+            echo "Production health check failed!"
+            exit 1
+          fi
+
+  # ============================================================================
+  # SECURITY SCAN: Dependency vulnerability check
+  # ============================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run npm audit
+        working-directory: frontend
+        run: npm audit --production
+        continue-on-error: true
+      
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+        if: env.SNYK_TOKEN != ''

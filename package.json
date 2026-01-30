@@ -1,0 +1,36 @@
+{
+  "name": "gim",
+  "version": "1.0.0",
+  "description": "Smart contract development with Hardhat",
+  "type": "module",
+  "scripts": {
+    "compile": "npm run compile --prefix blockchain",
+    "test": "npm run test --prefix blockchain",
+    "test:coverage": "npm run test:coverage --prefix blockchain",
+    "node": "npm run node --prefix blockchain",
+    "deploy:sepolia": "npm run deploy:sepolia --prefix blockchain",
+    "deploy:local": "npm run deploy:local --prefix blockchain", 
+    "verify:sepolia": "npm run verify:sepolia --prefix blockchain",
+    "clean": "npm run clean --prefix blockchain && rm -rf artifacts cache"
+  },
+  "keywords": [
+    "ethereum",
+    "smart-contracts",
+    "hardhat",
+    "solidity"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.0.5",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.1",
+    "@nomicfoundation/hardhat-verify": "^3.0.7",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@types/node": "^22.19.1",
+    "dotenv": "^17.2.3",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.0.15",
+    "typescript": "~5.8.0",
+    "viem": "^2.40.2"
+  }
+}

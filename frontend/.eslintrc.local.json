@@ -1,0 +1,11 @@
+{
+  "overrides": [
+    {
+      "files": ["src/lib/*-utils.ts", "src/__tests__/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-require-imports": "off"
+      }
+    }
+  ]
+}

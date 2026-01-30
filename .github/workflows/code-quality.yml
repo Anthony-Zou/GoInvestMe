@@ -1,0 +1,66 @@
+# Code Quality Check Workflow
+#
+# Runs code quality and formatting checks
+
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  code-quality:
+    name: Check Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      
+      - name: Check code formatting
+        working-directory: frontend
+        run: npx prettier --check "src/**/*.{ts,tsx,js,jsx,json,css,md}"
+        continue-on-error: true
+      
+      - name: Run TypeScript compiler
+        working-directory: frontend
+        run: npx tsc --noEmit
+      
+      - name: Check for console.log statements
+        run: |
+          if git --no-pager diff origin/main...HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx' | grep -E '^\+.*console\.(log|debug|info|warn|error)'; then
+            echo "⚠️  Found console statements in diff. Please remove or replace with proper logging."
+            echo "Use logInfo(), logError(), logDebug() from @/lib/logger instead."
+            exit 1
+          fi
+        continue-on-error: true
+      
+      - name: Check bundle size
+        working-directory: frontend
+        run: npm run build
+        continue-on-error: true
+      
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              body: '✅ Code quality checks complete! Review the logs for details.'
+            })

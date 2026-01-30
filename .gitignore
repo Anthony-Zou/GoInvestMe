@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Blockchain
+blockchain/cache/
+blockchain/artifacts/
+blockchain/coverage/
+blockchain/typechain-types/
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# OS
+Thumbs.db
+
+# Vercel
+.vercel
+
+# Misc
+*.pem
+.history
