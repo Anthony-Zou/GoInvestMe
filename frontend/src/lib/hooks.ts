@@ -202,6 +202,64 @@ export function useMilestones(roundAddress: string) {
   return { count: countRaw ? Number(countRaw) : 0 }
 }
 
+// Get detailed milestone information
+export function useMilestoneDetails(roundAddress: string, milestoneId: number) {
+  const { data } = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'milestones',
+    args: [BigInt(milestoneId)],
+    query: { enabled: !!roundAddress && milestoneId >= 0 }
+  })
+
+  if (!data) return null
+
+  // Milestone struct: [description, amount, isCompleted, isVerified, proofOfWork]
+  const milestone = data as readonly [string, bigint, boolean, boolean, string]
+
+  return {
+    description: milestone[0],
+    amount: milestone[1],
+    isCompleted: milestone[2],
+    isVerified: milestone[3],
+    proofOfWork: milestone[4]
+  }
+}
+
+// Submit proof-of-work for a milestone
+export function useSubmitMilestoneProof() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+
+  const submitProof = async (roundAddress: string, milestoneId: bigint, proofUrl: string) => {
+    writeContract({
+      address: roundAddress as `0x${string}`,
+      abi: TokenizedSAFEABI.abi,
+      functionName: 'submitMilestoneProof',
+      args: [milestoneId, proofUrl]
+    })
+  }
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { submitProof, hash, isPending, isConfirming, isSuccess, error }
+}
+
+// Verify a milestone (admin/protocol only)
+export function useVerifyMilestone() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+
+  const verifyMilestone = async (roundAddress: string, milestoneId: bigint) => {
+    writeContract({
+      address: roundAddress as `0x${string}`,
+      abi: TokenizedSAFEABI.abi,
+      functionName: 'verifyMilestone',
+      args: [milestoneId]
+    })
+  }
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { verifyMilestone, hash, isPending, isConfirming, isSuccess, error }
+}
+
 // --- LEGACY ADAPTERS (For Backward Compatibility) ---
 
 export function useEntrepreneurs() {

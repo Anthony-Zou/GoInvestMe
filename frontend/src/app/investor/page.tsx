@@ -224,6 +224,9 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
           </div>
         </div>
 
+        {/* Milestone Progress Section */}
+        <MilestoneProgressSection roundAddress={roundAddress} />
+
         {!kycVerified && (
           <div className="bg-yellow-50 p-4 rounded-lg flex items-center gap-3 border border-yellow-100">
             <ShieldCheck className="text-yellow-600 h-5 w-5" />
@@ -246,6 +249,62 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
           }}>Complete (Mock)</Button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function MilestoneProgressSection({ roundAddress }: { roundAddress: string }) {
+  const { useMilestones, useMilestoneDetails } = require('@/lib/hooks')
+  const { count } = useMilestones(roundAddress)
+
+  if (count === 0) return null
+
+  return (
+    <div className="border-t border-gray-100 pt-6">
+      <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+        <CheckCircle className="h-4 w-4 text-blue-600" />
+        Execution Milestones ({count})
+      </h3>
+      <div className="space-y-3">
+        {Array.from({ length: count }).map((_, i) => (
+          <MilestoneProgressItem key={i} roundAddress={roundAddress} milestoneId={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MilestoneProgressItem({ roundAddress, milestoneId }: { roundAddress: string, milestoneId: number }) {
+  const { useMilestoneDetails } = require('@/lib/hooks')
+  const milestone = useMilestoneDetails(roundAddress, milestoneId)
+
+  if (!milestone) return null
+
+  const getStatusIcon = () => {
+    if (milestone.isVerified) return <span className="text-green-600">✓</span>
+    if (milestone.isCompleted) return <span className="text-yellow-600">⏳</span>
+    return <span className="text-gray-400">○</span>
+  }
+
+  return (
+    <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+      <div className="mt-0.5">{getStatusIcon()}</div>
+      <div className="flex-1">
+        <p className="text-sm font-medium text-gray-900">{milestone.description}</p>
+        {milestone.proofOfWork && (
+          <a
+            href={milestone.proofOfWork}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:underline mt-1 block"
+          >
+            View proof →
+          </a>
+        )}
+      </div>
+      <div className="text-xs text-gray-500">
+        {milestone.isVerified ? 'Complete' : milestone.isCompleted ? 'Pending' : 'Not started'}
+      </div>
     </div>
   )
 }

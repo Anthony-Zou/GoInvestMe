@@ -14,12 +14,14 @@ import {
   useCreateRound,
   useRoundDetails,
   useMilestones,
+  useMilestoneDetails,
   useCreateMilestone,
   useWithdrawMilestone
 } from '@/lib/hooks'
 import { ArrowLeft, Plus, TrendingUp, Users, DollarSign, CheckCircle, Clock, ShieldCheck, Flag, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
+import { SubmitProofModal } from '@/components/SubmitProofModal'
 
 export default function FounderPage() {
   const { address, isConnected } = useAccount()
@@ -173,31 +175,130 @@ function StatCard({ icon: Icon, label, value, color }: any) {
 
 function MilestoneList({ roundAddress }: { roundAddress: string }) {
   const { count } = useMilestones(roundAddress)
-  const { withdrawMilestone, isPending } = useWithdrawMilestone()
+  const [showProofModal, setShowProofModal] = useState(false)
+  const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null)
 
-  // In a real app, fetch each milestone details (0 to count-1)
-  // For now, we mock the list visual based on count
-
-  if (count === 0) return <p className="text-gray-500 italic">No milestones defined yet.</p>
+  if (count === 0) return <p className="text-gray-500 italic">No milestones defined yet. Add your first milestone to unlock funds based on deliverables.</p>
 
   return (
-    <div className="space-y-4">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="bg-white p-2 rounded-full border border-gray-200">
-              <Flag className="w-4 h-4 text-blue-500" />
-            </div>
-            <div>
-              <p className="font-semibold text-gray-900">Milestone #{i + 1}</p>
-              <p className="text-xs text-gray-500">Unlocks funds upon completion</p>
-            </div>
+    <>
+      <div className="space-y-4">
+        {Array.from({ length: count }).map((_, i) => (
+          <MilestoneCard
+            key={i}
+            roundAddress={roundAddress}
+            milestoneId={i}
+            onSubmitProof={() => {
+              setSelectedMilestone(i)
+              setShowProofModal(true)
+            }}
+          />
+        ))}
+      </div>
+
+      {selectedMilestone !== null && (
+        <SubmitProofModal
+          open={showProofModal}
+          onOpenChange={setShowProofModal}
+          roundAddress={roundAddress}
+          milestoneId={selectedMilestone}
+        />
+      )}
+    </>
+  )
+}
+
+function MilestoneCard({ roundAddress, milestoneId, onSubmitProof }: {
+  roundAddress: string
+  milestoneId: number
+  onSubmitProof: () => void
+}) {
+  const milestone = useMilestoneDetails(roundAddress, milestoneId)
+  const { withdrawMilestone, isPending } = useWithdrawMilestone()
+
+  if (!milestone) {
+    return (
+      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100 animate-pulse">
+        <div className="h-12 bg-slate-200 rounded w-1/2"></div>
+      </div>
+    )
+  }
+
+  const getStatusBadge = () => {
+    if (milestone.isVerified) {
+      return <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded">✓ Verified</span>
+    }
+    if (milestone.isCompleted) {
+      return <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded">⏳ Pending Verification</span>
+    }
+    return <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded">○ Not Started</span>
+  }
+
+  const getActionButton = () => {
+    if (milestone.isVerified) {
+      return (
+        <Button
+          size="sm"
+          onClick={() => withdrawMilestone(roundAddress, BigInt(milestoneId))}
+          disabled={isPending}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          {isPending ? 'Processing...' : '💰 Withdraw Funds'}
+        </Button>
+      )
+    }
+    if (milestone.isCompleted) {
+      return (
+        <Button size="sm" variant="outline" disabled>
+          Awaiting Verification
+        </Button>
+      )
+    }
+    return (
+      <Button size="sm" onClick={onSubmitProof} className="bg-blue-600 hover:bg-blue-700">
+        📤 Submit Proof
+      </Button>
+    )
+  }
+
+  return (
+    <div className="p-5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 transition-colors">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-50 p-2 rounded-full border border-blue-200">
+            <Flag className="w-4 h-4 text-blue-600" />
           </div>
-          <Button size="sm" variant="outline" onClick={() => withdrawMilestone(roundAddress, BigInt(i))} disabled={isPending}>
-            {isPending ? 'Processing...' : 'Request Withdraw'}
-          </Button>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-semibold text-gray-900">Milestone #{milestoneId + 1}</p>
+              {getStatusBadge()}
+            </div>
+            <p className="text-sm text-gray-600">{milestone.description}</p>
+          </div>
         </div>
-      ))}
+        <div className="text-right">
+          <p className="text-sm text-gray-500">Unlock Amount</p>
+          <p className="text-lg font-bold text-gray-900">{formatEther(milestone.amount)} USDC</p>
+        </div>
+      </div>
+
+      {milestone.proofOfWork && (
+        <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+          <p className="text-xs font-semibold text-blue-700 mb-1">Proof of Work Submitted:</p>
+          <a
+            href={milestone.proofOfWork}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 hover:underline break-all"
+          >
+            {milestone.proofOfWork}
+          </a>
+        </div>
+      )}
+
+      <div className="mt-4 flex justify-end">
+        {getActionButton()}
+      </div>
     </div>
   )
 }
