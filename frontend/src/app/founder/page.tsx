@@ -22,6 +22,8 @@ import { ArrowLeft, Plus, TrendingUp, Users, DollarSign, CheckCircle, Clock, Shi
 import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { SubmitProofModal } from '@/components/SubmitProofModal'
+import { AddTeamMemberModal } from '@/components/AddTeamMemberModal'
+import { TeamList } from '@/components/TeamList'
 
 export default function FounderPage() {
   const { address, isConnected } = useAccount()
@@ -45,6 +47,8 @@ export default function FounderPage() {
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [showCreateRoundModal, setShowCreateRoundModal] = useState(false)
   const [showMilestoneModal, setShowMilestoneModal] = useState(false)
+  const [showTeamModal, setShowTeamModal] = useState(false)
+  const [teamRefresh, setTeamRefresh] = useState(0)
 
   if (!isConnected) {
     return (
@@ -106,6 +110,17 @@ export default function FounderPage() {
                 <StatCard icon={Users} label="Investors" value="-" color="purple" />
               </div>
 
+              {/* Team Section */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold">Team</h2>
+                  <Button variant="outline" onClick={() => setShowTeamModal(true)}>
+                    <Plus className="w-4 h-4 mr-2" /> Add Member
+                  </Button>
+                </div>
+                <TeamList startupId={startupId!} onRefresh={teamRefresh} />
+              </div>
+
               {/* Milestones */}
               <div className="bg-white rounded-2xl border border-gray-100 p-8">
                 <div className="flex justify-between items-center mb-6">
@@ -118,15 +133,32 @@ export default function FounderPage() {
               </div>
             </div>
           ) : hasStartup ? (
-            <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 border-dashed">
-              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <TrendingUp className="h-8 w-8 text-blue-600" />
+            <div className="space-y-8">
+              {/* Team Section (before fundraising) */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold">Build Your Team</h2>
+                    <p className="text-sm text-gray-600 mt-1">Add co-founders and key team members before launching your round</p>
+                  </div>
+                  <Button variant="outline" onClick={() => setShowTeamModal(true)}>
+                    <Plus className="w-4 h-4 mr-2" /> Add Member
+                  </Button>
+                </div>
+                <TeamList startupId={startupId!} onRefresh={teamRefresh} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Ready to Raise?</h3>
-              <p className="text-gray-500 mb-6 max-w-sm mx-auto">
-                Launch a compliant SAFE round to accept investments from verified investors.
-              </p>
-              <Button onClick={() => setShowCreateRoundModal(true)}>Launch Round</Button>
+
+              {/* Launch Round CTA */}
+              <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 border-dashed">
+                <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <TrendingUp className="h-8 w-8 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Ready to Raise?</h3>
+                <p className="text-gray-500 mb-6 max-w-sm mx-auto">
+                  Launch a compliant SAFE round to accept investments from verified investors.
+                </p>
+                <Button onClick={() => setShowCreateRoundModal(true)}>Launch Round</Button>
+              </div>
             </div>
           ) : (
             // No Startup State handled by header button mostly, but can add placeholder here
@@ -142,6 +174,14 @@ export default function FounderPage() {
       <RegisterStartupModal open={showRegisterModal} onOpenChange={setShowRegisterModal} />
       {startupId && <CreateRoundModal open={showCreateRoundModal} onOpenChange={setShowCreateRoundModal} startupId={startupId} />}
       {roundAddress && <CreateMilestoneModal open={showMilestoneModal} onOpenChange={setShowMilestoneModal} roundAddress={roundAddress} />}
+      {startupId && (
+        <AddTeamMemberModal
+          open={showTeamModal}
+          onOpenChange={setShowTeamModal}
+          startupId={startupId}
+          onSuccess={() => setTeamRefresh(prev => prev + 1)}
+        />
+      )}
 
     </div>
   )

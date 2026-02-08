@@ -24,6 +24,24 @@ enum KycStatus {
   REJECTED
 }
 
+enum TeamRole {
+  FOUNDER
+  CO_FOUNDER
+  TECHNICAL_LEAD
+  BUSINESS_LEAD
+  DESIGN_LEAD
+  MARKETING_LEAD
+  ADVISOR
+  CONTRIBUTOR
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
 model User {
   id            String    @id @default(cuid())
   walletAddress String    @unique
@@ -34,6 +52,7 @@ model User {
   profile       UserProfile?
   startups      Startup[]
   verifications Verification[]
+  teamMemberships TeamMember[]
 }
 
 model UserProfile {
@@ -69,8 +88,37 @@ model Startup {
   kybStatus   KycStatus @default(NONE)
   
   rounds      FundingRound[]
+  teamMembers TeamMember[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model TeamMember {
+  id          String   @id @default(cuid())
+  startupId   String
+  startup     Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  
+  userId      String?  // Null if invitation pending
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  // Invitation details (for pending members)
+  inviteEmail String?
+  inviteWallet String?
+  
+  role        TeamRole
+  title       String?  // Custom title like "Head of Engineering"
+  
+  // Equity allocation (in basis points, e.g., 2500 = 25%)
+  equityBps   Int?
+  
+  status      InvitationStatus @default(PENDING)
+  
+  invitedAt   DateTime @default(now())
+  joinedAt    DateTime?
+  
+  @@unique([startupId, userId])
+  @@index([startupId])
+  @@index([userId])
 }
 
 model FundingRound {
