@@ -13,6 +13,7 @@ interface ITokenizedSAFE {
         address _usdcToken,
         address _investorRegistry,
         address _founder,
+        address _protocolAdmin,
         uint256 _valuationCap,
         uint256 _discountRate,
         uint256 _minInvestment,
@@ -73,6 +74,7 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
     address public safeImplementation;
     address public usdcToken;
     address public investorRegistry;
+    address public protocolAdmin; // Protocol controller
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -345,6 +347,7 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
         safeImplementation = _safeImplementation;
         usdcToken = _usdcToken;
         investorRegistry = _investorRegistry;
+        protocolAdmin = msg.sender; // The admin calling this becomes the SAFE Protocol Admin
         emit ProtocolConfigUpdated(_safeImplementation, _usdcToken, _investorRegistry);
     }
 
@@ -379,12 +382,14 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
         string memory symbol = "SAFE"; // Simplified for now
 
         // Initialize the new SAFE
+        // Initialize the new SAFE
         ITokenizedSAFE(roundAddress).initialize(
             name,
             symbol,
             usdcToken,
             investorRegistry,
-            msg.sender, // Founder is the admin of the SAFE
+            msg.sender, // Founder
+            protocolAdmin, // Protocol Admin
             _valuationCap,
             _discountRate,
             _minInvestment,

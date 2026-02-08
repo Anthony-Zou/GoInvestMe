@@ -233,6 +233,17 @@ contract InvestorRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrad
     }
 
     /**
+     * @notice Check if investor is KYC verified and active
+     * @param _investor Investor address
+     * @return bool Is verified or not
+     */
+    function isVerified(address _investor) external view returns (bool) {
+        if (!isRegistered[_investor]) return false;
+        Investor memory inv = investors[_investor];
+        return inv.kycVerified && block.timestamp <= inv.kycExpiry && inv.isActive;
+    }
+
+    /**
      * @notice Get investor details
      * @param _investor Investor address
      * @return Investor struct

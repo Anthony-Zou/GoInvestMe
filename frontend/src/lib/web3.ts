@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi'
 import { sepolia, mainnet } from 'wagmi/chains'
-import { injected, metaMask } from 'wagmi/connectors'
+import { injected } from 'wagmi/connectors'
 import { getConfig } from './config'
 
 /**
@@ -74,15 +74,17 @@ export const config = createConfig({
   chains: buildChains(),
   connectors: [
     injected(),
-    metaMask(),
   ],
   transports: buildChainTransports(),
 })
 
 /**
- * Contract ABI (imported from compiled artifacts)
+ * Contract ABIs (imported from compiled artifacts)
  */
-export { default as GoInvestMeCoreABI } from './GoInvestMeCore.json'
+export { default as GoInvestMeCoreABI } from './GoInvestMeCore.json' // Deprecated
+export { default as TokenizedSAFEABI } from './abis/TokenizedSAFE.json'
+export { default as StartupRegistryABI } from './abis/StartupRegistry.json'
+export { default as InvestorRegistryABI } from './abis/InvestorRegistry.json'
 
 /**
  * TypeScript module augmentation for wagmi

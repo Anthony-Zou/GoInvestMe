@@ -50,6 +50,7 @@ describe("TokenizedSAFE", function () {
             await usdc.getAddress(),
             await registry.getAddress(),
             founder.address,
+            owner.address, // _protocolAdmin
             CAP,
             DISCOUNT,
             MIN_INVEST,
@@ -76,11 +77,18 @@ describe("TokenizedSAFE", function () {
             expect(await safe.valuationCap()).to.equal(CAP);
         });
 
-        it("Should grant ADMIN_ROLE to deployer", async function () {
+        it("Should grant DEFAULT_ADMIN_ROLE to protocol admin (owner)", async function () {
+            const DEFAULT_ADMIN_ROLE = await safe.DEFAULT_ADMIN_ROLE();
+            expect(await safe.hasRole(DEFAULT_ADMIN_ROLE, owner.address)).to.be.true;
+        });
+
+        it("Should grant ADMIN_ROLE to founder", async function () {
             const ADMIN_ROLE = await safe.ADMIN_ROLE();
-            expect(await safe.hasRole(ADMIN_ROLE, owner.address)).to.be.true;
+            expect(await safe.hasRole(ADMIN_ROLE, founder.address)).to.be.true;
         });
     });
+
+    // ... Investment tests match logic (omitted lines unchanged) ...
 
     describe("Investment", function () {
         it("Should allow verified investor to invest", async function () {
@@ -132,34 +140,33 @@ describe("TokenizedSAFE", function () {
             await safe.connect(investor1).invest(ethers.parseUnits("10000", 6));
         });
 
-        it("Should allow admin to withdraw funds to founder", async function () {
-            const initialFounderBalance = await usdc.balanceOf(founder.address);
+        it("Should allow protocol admin to emergency withdraw funds", async function () {
             const contractBalance = await usdc.balanceOf(await safe.getAddress());
 
-            await expect(safe.connect(owner).withdrawFunds())
+            // Emergency withdraw to owner
+            await expect(safe.connect(owner).emergencyWithdraw(owner.address))
                 .to.emit(safe, "FundsWithdrawn")
-                .withArgs(founder.address, contractBalance);
+                .withArgs(owner.address, contractBalance);
 
-            expect(await usdc.balanceOf(founder.address)).to.equal(initialFounderBalance + contractBalance);
             expect(await usdc.balanceOf(await safe.getAddress())).to.equal(0);
         });
 
-        it("Should reject withdrawal by non-admin", async function () {
+        it("Should reject emergency withdrawal by non-admin", async function () {
             await expect(
-                safe.connect(investor1).withdrawFunds()
-            ).to.be.reverted;
+                safe.connect(investor1).emergencyWithdraw(investor1.address)
+            ).to.be.reverted; // AccessControl revert
         });
     });
 
     describe("Pausability", function () {
         it("Should pause and unpause investment", async function () {
-            await safe.pause();
+            await safe.connect(founder).pause();
 
             await expect(
                 safe.connect(investor1).invest(ethers.parseUnits("1000", 6))
             ).to.be.revertedWithCustomError(safe, "EnforcedPause");
 
-            await safe.unpause();
+            await safe.connect(founder).unpause();
 
             await expect(
                 safe.connect(investor1).invest(ethers.parseUnits("1000", 6))

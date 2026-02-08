@@ -35,8 +35,23 @@ contract TokenizedSAFE is
     uint256 public roundEndTime;
     address public founderAddress;
 
+    // Milestones
+    struct Milestone {
+        string description;
+        uint256 amount;
+        bool isCompleted;
+        bool isVerified;
+        string proofOfWork;
+    }
+
+    mapping(uint256 => Milestone) public milestones;
+    uint256 public milestoneCount;
+
     event InvestmentReceived(address indexed investor, uint256 amount, uint256 tokensMinted);
     event FundsWithdrawn(address indexed to, uint256 amount);
+    event MilestoneCreated(uint256 indexed id, string description, uint256 amount);
+    event MilestoneVerified(uint256 indexed id);
+    event MilestoneWithdrawn(uint256 indexed id, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -49,6 +64,7 @@ contract TokenizedSAFE is
         address _usdcToken,
         address _investorRegistry,
         address _founder,
+        address _protocolAdmin, // New parameter
         uint256 _valuationCap,
         uint256 _discountRate,
         uint256 _minInvestment,
@@ -61,9 +77,10 @@ contract TokenizedSAFE is
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(UPGRADER_ROLE, msg.sender);
-        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); // Registry
+        _grantRole(DEFAULT_ADMIN_ROLE, _protocolAdmin); // Protocol Admin (Deployer/Multisig)
+        _grantRole(UPGRADER_ROLE, _protocolAdmin);
+        _grantRole(ADMIN_ROLE, _founder); // Founder gets regular admin
 
         usdcToken = IERC20(_usdcToken);
         investorRegistry = IInvestorRegistry(_investorRegistry);
@@ -101,12 +118,78 @@ contract TokenizedSAFE is
         emit InvestmentReceived(msg.sender, amount, amount);
     }
 
-    function withdrawFunds() public nonReentrant onlyRole(ADMIN_ROLE) {
-        uint256 balance = usdcToken.balanceOf(address(this));
-        require(balance > 0, "No funds to withdraw");
-        require(usdcToken.transfer(founderAddress, balance), "Transfer failed");
+    /**
+     * @notice Create a new milestone (Founder only)
+     * @param description Brief description of the deliverable
+     * @param amount Amount to unlock upon completion
+     */
+    function createMilestone(string memory description, uint256 amount) public onlyRole(ADMIN_ROLE) {
+        uint256 id = milestoneCount++;
+        milestones[id] = Milestone({
+            description: description,
+            amount: amount,
+            isCompleted: false,
+            isVerified: false,
+            proofOfWork: ""
+        });
+        emit MilestoneCreated(id, description, amount);
+    }
+
+    /**
+     * @notice Submit proof for a milestone (Founder)
+     * @param id Milestone ID
+     * @param proof Link to evidence (GitHub PR, Loom, etc.)
+     */
+    function submitMilestoneProof(uint256 id, string memory proof) public onlyRole(ADMIN_ROLE) {
+        require(id < milestoneCount, "Invalid ID");
+        require(!milestones[id].isCompleted, "Already completed");
         
-        emit FundsWithdrawn(founderAddress, balance);
+        milestones[id].isCompleted = true; // Marked as completed by founder, pending verification
+        milestones[id].proofOfWork = proof;
+    }
+
+    /**
+     * @notice Verify a milestone (Protocol Admin / Auditor only)
+     * @dev For MVP, we allow the Factory owner (UPGRADER_ROLE/DEFAULT_ADMIN) or a specific AUDITOR to verify.
+     *      Since msg.sender in initialize (the Registry) has DEFAULT_ADMIN_ROLE, it can manage this.
+     *      Ideally, we'd have a separate AUDITOR_ROLE.
+     */
+    function verifyMilestone(uint256 id) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(id < milestoneCount, "Invalid ID");
+        require(milestones[id].isCompleted, "Not marked completed");
+        require(!milestones[id].isVerified, "Already verified");
+
+        milestones[id].isVerified = true;
+        emit MilestoneVerified(id);
+    }
+
+    /**
+     * @notice Withdraw funds for a verified milestone (Founder)
+     */
+    function withdrawMilestoneFunds(uint256 id) public nonReentrant onlyRole(ADMIN_ROLE) {
+        require(id < milestoneCount, "Invalid ID");
+        Milestone storage m = milestones[id];
+        require(m.isVerified, "Milestone not verified");
+        require(m.amount > 0, "Already withdrawn");
+
+        uint256 amount = m.amount;
+        uint256 balance = usdcToken.balanceOf(address(this));
+        require(balance >= amount, "Insufficient funds");
+
+        m.amount = 0; // Prevent re-entrancy / double withdrawal
+        
+        require(usdcToken.transfer(founderAddress, amount), "Transfer failed");
+        emit MilestoneWithdrawn(id, amount);
+    }
+
+    // Deprecated: withdrawFunds replaced by milestone-based system.
+    // Kept but commented out or restricted to emergency only?
+    // Let's restrict it to DEFAULT_ADMIN_ROLE (Protocol) for emergency drainage/recovery.
+    function emergencyWithdraw(address to) public nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = usdcToken.balanceOf(address(this));
+        require(balance > 0, "No funds");
+        require(usdcToken.transfer(to, balance), "Transfer failed");
+        emit FundsWithdrawn(to, balance);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}

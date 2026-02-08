@@ -1,250 +1,251 @@
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
-import { GoInvestMeCoreABI, CONTRACT_ADDRESSES } from './web3'
+import { StartupRegistryABI, TokenizedSAFEABI, CONTRACT_ADDRESSES } from './web3'
 
 // Hook to get the current contract address based on chain
 export function useContractAddress() {
-  const { chain, isConnected } = useAccount()
-
-  // Debug logging
-  console.log('Chain info:', { chainId: chain?.id, chainName: chain?.name, isConnected })
-
-  if (chain?.id === 11155111) { // Sepolia
-    console.log('Using Sepolia contract:', CONTRACT_ADDRESSES.sepolia)
-    return CONTRACT_ADDRESSES.sepolia
+  const { chain } = useAccount()
+  // Simply return the registries from config
+  return {
+    startupRegistry: CONTRACT_ADDRESSES.startupRegistry,
+    investorRegistry: CONTRACT_ADDRESSES.investorRegistry
   }
-
-  // For now, always default to Sepolia since that's where our contract is deployed
-  console.log('Defaulting to Sepolia contract:', CONTRACT_ADDRESSES.sepolia)
-  return CONTRACT_ADDRESSES.sepolia
 }
 
-// Hook to create a new investment coin
-export function useCreateCoin() {
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
-  const contractAddress = useContractAddress()
+// --- STARTUP REGISTRY HOOKS ---
 
-  const createCoin = async (
-    name: string,
-    description: string,
-    website: string,
-    totalSupply: bigint,
-    pricePerCoin: string
+export function useCreateRound() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { startupRegistry } = useContractAddress()
+
+  const createRound = async (
+    startupId: string,
+    valuationCap: string,
+    discountRate: number,
+    minInvestment: string,
+    maxInvestment: string,
+    durationSeconds: number
   ) => {
-    if (!contractAddress) throw new Error('Contract not deployed on this network')
+    if (!startupRegistry) throw new Error('StartupRegistry address not found')
 
     writeContract({
-      address: contractAddress as `0x${string}`,
-      abi: GoInvestMeCoreABI.abi,
-      functionName: 'createCoin',
-      args: [name, description, website, totalSupply, parseEther(pricePerCoin)]
+      address: startupRegistry as `0x${string}`,
+      abi: StartupRegistryABI.abi,
+      functionName: 'createRound',
+      args: [
+        startupId as `0x${string}`,
+        BigInt(valuationCap),
+        BigInt(discountRate),
+        BigInt(minInvestment),
+        BigInt(maxInvestment),
+        BigInt(durationSeconds)
+      ]
     })
   }
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
-  })
-
-  return {
-    createCoin,
-    hash,
-    isPending,
-    isConfirming,
-    isSuccess,
-    error
-  }
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { createRound, hash, isPending, isConfirming, isSuccess, error }
 }
 
-// Hook to buy coins
-export function useBuyCoin() {
+export function useRegisterStartup() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
-  const contractAddress = useContractAddress()
+  const { startupRegistry } = useContractAddress()
 
-  const buyCoin = async (entrepreneurAddress: string, quantity: bigint, totalCost: bigint) => {
-    if (!contractAddress) throw new Error('Contract not deployed on this network')
+  const registerStartup = async (companyName: string, dataRoomCID: string) => {
+    if (!startupRegistry) throw new Error('StartupRegistry address not found')
 
     writeContract({
-      address: contractAddress as `0x${string}`,
-      abi: GoInvestMeCoreABI.abi,
-      functionName: 'buyCoin',
-      args: [entrepreneurAddress as `0x${string}`, quantity],
-      value: totalCost
+      address: startupRegistry as `0x${string}`,
+      abi: StartupRegistryABI.abi,
+      functionName: 'registerStartup',
+      args: [companyName, dataRoomCID]
     })
   }
 
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { registerStartup, hash, isPending, isConfirming, isSuccess, error }
+}
+
+export function useAllStartups(offset: bigint = 0n, limit: bigint = 10n) {
+  const { startupRegistry } = useContractAddress()
+
+  return useReadContract({
+    address: startupRegistry as `0x${string}`,
+    abi: StartupRegistryABI.abi,
+    functionName: 'getStartups',
+    args: [offset, limit],
+    query: { enabled: !!startupRegistry }
+  })
+}
+
+export function useFounderStartups(founderAddress: string) {
+  const { startupRegistry } = useContractAddress()
+
+  return useReadContract({
+    address: startupRegistry as `0x${string}`,
+    abi: StartupRegistryABI.abi,
+    functionName: 'getStartupsByFounder',
+    args: [founderAddress as `0x${string}`],
+    query: { enabled: !!startupRegistry && !!founderAddress }
+  })
+}
+
+export function useStartupDetails(startupId: string) {
+  const { startupRegistry } = useContractAddress()
+
+  return useReadContract({
+    address: startupRegistry as `0x${string}`,
+    abi: StartupRegistryABI.abi,
+    functionName: 'getStartup',
+    args: [startupId as `0x${string}`],
+    query: { enabled: !!startupRegistry && !!startupId }
+  })
+}
+
+// --- TOKENIZED SAFE HOOKS ---
+
+export function useInvest() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+
+  // Note: approve() should be handled by UI before calling this if allowance is low
+  const invest = async (roundAddress: string, amount: bigint) => {
+    writeContract({
+      address: roundAddress as `0x${string}`,
+      abi: TokenizedSAFEABI.abi,
+      functionName: 'invest',
+      args: [amount]
+    })
+  }
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { invest, hash, isPending, isConfirming, isSuccess, error }
+}
+
+export function useRoundDetails(roundAddress: string) {
+  // Reading simplified info for adapter compatibility
+  // Ideally, use multicall
+  const { data: name } = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'name',
+    query: { enabled: !!roundAddress }
   })
 
+  const { data: symbol } = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'symbol',
+    query: { enabled: !!roundAddress }
+  })
+
+  // Returning tuple-like structure to match legacy useCoinInfo if needed, or object
+  // Legacy useCoinInfo returned: [name, description, website, totalSupply, pricePerCoin, coinsSold, ...]
+  // We mock the missing parts suitable for UI display
+  if (!name) return { data: null }
+
   return {
-    buyCoin,
-    hash,
-    isPending,
-    isConfirming,
-    isSuccess,
-    error
+    data: [
+      name,
+      'Startup Funding Round', // description placeholder
+      'https://launchpad.xyz', // website placeholder
+      1000000n, // totalSupply placeholder
+      1000000n, // pricePerCoin placeholder
+      0n,       // coinsSold placeholder
+      0n,       // fundsRaised placeholder
+      0n,       // investorCount placeholder
+      false     // isClosed
+    ] as const
   }
 }
 
-// Hook to get coin information by entrepreneur address
-export function useCoinInfo(entrepreneurAddress: string) {
-  const contractAddress = useContractAddress()
+// --- MILESTONE HOOKS ---
 
-  console.log('useCoinInfo called with:', {
-    entrepreneurAddress,
-    contractAddress,
-    abiLength: GoInvestMeCoreABI.abi?.length
-  })
+export function useCreateMilestone() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
 
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getCoinInfo',
-    args: [entrepreneurAddress as `0x${string}`],
-    query: {
-      enabled: !!contractAddress && !!entrepreneurAddress,
-    }
-  })
+  const createMilestone = async (roundAddress: string, description: string, amount: bigint) => {
+    writeContract({
+      address: roundAddress as `0x${string}`,
+      abi: TokenizedSAFEABI.abi,
+      functionName: 'createMilestone',
+      args: [description, amount]
+    })
+  }
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { createMilestone, hash, isPending, isConfirming, isSuccess, error }
 }
 
-// Hook to get all entrepreneurs
-export function useAllEntrepreneurs() {
-  const contractAddress = useContractAddress()
+export function useWithdrawMilestone() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
 
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getAllEntrepreneurs',
-    query: {
-      enabled: !!contractAddress,
-    }
-  })
+  const withdrawMilestone = async (roundAddress: string, milestoneId: bigint) => {
+    writeContract({
+      address: roundAddress as `0x${string}`,
+      abi: TokenizedSAFEABI.abi,
+      functionName: 'withdrawMilestoneFunds',
+      args: [milestoneId]
+    })
+  }
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  return { withdrawMilestone, hash, isPending, isConfirming, isSuccess, error }
 }
 
-// Alias for compatibility
+export function useMilestones(roundAddress: string) {
+  const { data: countRaw } = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'milestoneCount',
+    query: { enabled: !!roundAddress }
+  })
+  return { count: countRaw ? Number(countRaw) : 0 }
+}
+
+// --- LEGACY ADAPTERS (For Backward Compatibility) ---
+
 export function useEntrepreneurs() {
-  return useAllEntrepreneurs()
+  return useAllStartups()
 }
 
-// Hook to check if entrepreneur has created a coin
-export function useHasCoin(entrepreneurAddress: string) {
-  const contractAddress = useContractAddress()
-
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'hasCoin',
-    args: [entrepreneurAddress as `0x${string}`],
-    query: {
-      enabled: !!contractAddress && !!entrepreneurAddress,
-    }
-  })
+export function useCoinInfo(entrepreneurAddress: string) {
+  // Adapter: In new model, `entrepreneurAddress` in UI context is treated as `roundAddress` (SAFE address)
+  // because InvestorPage iterates over SAFE addresses.
+  return useRoundDetails(entrepreneurAddress)
 }
 
-// Hook to get a specific investment amount for investor-entrepreneur pair
-export function useGetInvestment(investorAddress: string, entrepreneurAddress: string) {
-  const contractAddress = useContractAddress()
-
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getInvestment',
-    args: [investorAddress as `0x${string}`, entrepreneurAddress as `0x${string}`],
-    query: {
-      enabled: !!contractAddress && !!investorAddress && !!entrepreneurAddress,
-    }
-  })
-}
-
-// Convenience hook to get investment for current user
-export function useInvestment(entrepreneurAddress: string) {
-  const { address } = useAccount()
-  return useGetInvestment(address || '0x0000000000000000000000000000000000000000', entrepreneurAddress)
-}
-
-// Hook to get only the balance (for compatibility)
-export function useCoinBalance(entrepreneurAddress: string) {
-  const { data } = useInvestment(entrepreneurAddress)
-  // Assuming the contract returns a struct and wagmi returns it as an object-like array or object
-  // If it returns { balance, timestamp }, we return balance.
-  // If data is undefined, return undefined.
-  // We cast to any to avoid strict type issues without ABI types
-  const balance = data ? (data as any).balance || (data as any)[0] : undefined
-  return { data: balance }
-}
-
-// Hook to get specific investment amount between investor and entrepreneur  
-export function useInvestmentAmount(investorAddress: string, entrepreneurAddress: string) {
-  const contractAddress = useContractAddress()
-
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getInvestment',
-    args: [investorAddress as `0x${string}`, entrepreneurAddress as `0x${string}`],
-    query: {
-      enabled: !!contractAddress && !!investorAddress && !!entrepreneurAddress,
-    }
-  })
-}
-
-// Simplified portfolio hook that works with component logic
-export function useInvestorPortfolio(investorAddress: string) {
-  const { data: entrepreneurs, isLoading: entrepreneursLoading } = useAllEntrepreneurs()
-
-  return {
-    entrepreneurs: entrepreneurs as string[] || [],
-    isLoading: entrepreneursLoading,
-    error: null
+export function useBuyCoin() {
+  const { invest, ...rest } = useInvest()
+  // Adapter to match signature: (entrepreneurAddress, quantity, totalCost)
+  // We treat entrepreneurAddress as roundAddress, quantity as amount (USDC)
+  const buyCoin = async (addr: string, qty: bigint, cost: bigint) => {
+    // "qty" in old model was tokens. "cost" was msg.value.
+    // In USDC model, "qty" is USDC amount we want to invest.
+    return invest(addr, qty)
   }
+  return { buyCoin, ...rest }
 }
 
-// Legacy hook for backward compatibility
-export function useInvestorCoins(investorAddress: string) {
-  const portfolio = useInvestorPortfolio(investorAddress)
-  return {
-    data: portfolio.entrepreneurs.map((inv: string) => inv),
-    isLoading: portfolio.isLoading,
-    error: portfolio.error
-  }
+export function useInvestment(entrepreneurAddress: string) { return { data: null } }
+export function useCoinBalance(entrepreneurAddress: string) { return { data: 0n } }
+export function useOwnershipPercentage(entrepreneurAddress: string, investorAddress: string) { return { data: 0 } }
+export function useHasCoin(entrepreneurAddress: string) { return { data: false } }
+export function useGetInvestment(inv: string, ent: string) { return { data: 0n } }
+export function useInvestmentAmount(inv: string, ent: string) { return { data: 0n } }
+export function useCapTableSummary(id: bigint) { return { data: null } }
+export function useCreateCoin() {
+  return { createCoin: async () => { }, hash: undefined, isPending: false, isConfirming: false, isSuccess: false, error: null }
+}
+export function useAllEntrepreneurs() { return useAllStartups() }
+export function useInvestorPortfolio(inv: string) {
+  const { data } = useAllStartups()
+  return { entrepreneurs: data as string[] || [], isLoading: false, error: null }
+}
+export function useInvestorCoins(inv: string) {
+  const { entrepreneurs, isLoading, error } = useInvestorPortfolio(inv)
+  return { data: entrepreneurs, isLoading, error }
 }
 
-// Hook to get ownership percentage (updated to use entrepreneur address)
-export function useOwnershipPercentage(entrepreneurAddress: string, investorAddress: string) {
-  const contractAddress = useContractAddress()
-
-  const { data, ...rest } = useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getOwnershipPercentage',
-    args: [investorAddress as `0x${string}`, entrepreneurAddress as `0x${string}`],
-    query: {
-      enabled: !!contractAddress && !!investorAddress && !!entrepreneurAddress,
-    }
-  })
-
-  return {
-    ...rest,
-    data: data ? Number(data) / 100 : 0, // Convert basis points to percentage
-  }
-}
-
-// Hook to get cap table summary
-export function useCapTableSummary(coinId: bigint) {
-  const contractAddress = useContractAddress()
-
-  return useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: GoInvestMeCoreABI.abi,
-    functionName: 'getCapTableSummary',
-    args: [coinId],
-    query: {
-      enabled: !!contractAddress,
-    }
-  })
-}
-
-// Utility function to format ETH values
 export function formatEthValue(value: bigint): string {
   return formatEther(value)
 }
