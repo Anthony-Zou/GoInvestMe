@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAccount } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
@@ -24,6 +24,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SubmitProofModal } from '@/components/SubmitProofModal'
 import { AddTeamMemberModal } from '@/components/AddTeamMemberModal'
 import { TeamList } from '@/components/TeamList'
+import { CapTable } from '@/components/CapTable'
 
 export default function FounderPage() {
   const { address, isConnected } = useAccount()
@@ -49,6 +50,17 @@ export default function FounderPage() {
   const [showMilestoneModal, setShowMilestoneModal] = useState(false)
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamRefresh, setTeamRefresh] = useState(0)
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+
+  // Fetch team members when startup exists
+  useEffect(() => {
+    if (startupId) {
+      fetch(`/api/team/${startupId}`)
+        .then(res => res.json())
+        .then(data => setTeamMembers(data.teamMembers || []))
+        .catch(err => console.error('Error fetching team:', err))
+    }
+  }, [startupId, teamRefresh])
 
   if (!isConnected) {
     return (
@@ -120,6 +132,14 @@ export default function FounderPage() {
                 </div>
                 <TeamList startupId={startupId!} onRefresh={teamRefresh} />
               </div>
+
+              {/* Cap Table */}
+              {teamMembers.some(m => m.equityBps && m.equityBps > 0) && (
+                <div className="bg-white rounded-2xl border border-gray-100 p-8">
+                  <h2 className="text-xl font-bold mb-6">Cap Table</h2>
+                  <CapTable teamMembers={teamMembers} />
+                </div>
+              )}
 
               {/* Milestones */}
               <div className="bg-white rounded-2xl border border-gray-100 p-8">
