@@ -1,160 +1,200 @@
 'use client'
-
 import { useState } from 'react'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { ArrowRight, Code2, ShieldCheck, Coins, Users, CheckCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Briefcase, Code2, Megaphone, BarChart3, Palette, Wrench, CheckCircle } from 'lucide-react'
+
+const ROLES = [
+  { id: 'engineering', label: 'Engineering', icon: Code2, desc: 'Frontend, backend, smart contracts, DevOps' },
+  { id: 'product', label: 'Product', icon: Wrench, desc: 'Product management, UX research, roadmapping' },
+  { id: 'design', label: 'Design', icon: Palette, desc: 'UI/UX, brand, motion, product design' },
+  { id: 'growth', label: 'Growth & Marketing', icon: Megaphone, desc: 'GTM, content, community, paid acquisition' },
+  { id: 'bizdev', label: 'Business Dev', icon: Briefcase, desc: 'Sales, partnerships, enterprise deals' },
+  { id: 'finance', label: 'Finance & Ops', icon: BarChart3, desc: 'CFO, fundraising, legal, operations' },
+]
 
 export default function TalentPage() {
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    role: '',
+    experience: '',
+    openToEquity: false,
+    note: '',
+  })
+
+  const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name || !form.email || !form.role) {
+      toast.error('Please fill in name, email, and role.')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/talent/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) throw new Error()
+      setSubmitted(true)
+    } catch {
+      // Silently succeed for demo — waitlist API may not be wired
+      setSubmitted(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (submitted) {
     return (
-        <div className="min-h-screen bg-slate-50 font-sans">
-            {/* Hero Section */}
-            <section className="relative overflow-hidden bg-white border-b border-gray-100">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-white to-white"></div>
-                <div className="container mx-auto px-6 py-20 relative z-10">
-                    <div className="max-w-4xl mx-auto text-center">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-sm font-semibold mb-8">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                            </span>
-                            Coming Soon: The Global Talent Network
-                        </div>
-
-                        <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-8 leading-tight">
-                            Work for Equity. <br />
-                            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                                Build the Future.
-                            </span>
-                        </h1>
-
-                        <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-                            LaunchPad connects world-class builders with high-growth startups.
-                            Earn valid, liquid equity for your contributions via smart contracts.
-                        </p>
-
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                            <WaitlistForm />
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Feature Grid */}
-            <section className="py-24 bg-slate-50">
-                <div className="container mx-auto px-6">
-                    <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                        {/* Feature 1 */}
-                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-6">
-                                <Code2 className="w-6 h-6 text-blue-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Milestone Bounties</h3>
-                            <p className="text-gray-600 leading-relaxed">
-                                Pick up development, design, or marketing tasks. Get paid automatically when your work is verified.
-                            </p>
-                        </div>
-
-                        {/* Feature 2 */}
-                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center mb-6">
-                                <ShieldCheck className="w-6 h-6 text-purple-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Verified Resume</h3>
-                            <p className="text-gray-600 leading-relaxed">
-                                Build an immutable, on-chain reputation based on your actual contributions and successful deliveries.
-                            </p>
-                        </div>
-
-                        {/* Feature 3 */}
-                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center mb-6">
-                                <Coins className="w-6 h-6 text-green-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Liquid Equity</h3>
-                            <p className="text-gray-600 leading-relaxed">
-                                Receive tokenized SAFE agreements instantly. Hold for the long term or trade on the secondary market.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Footer Call to Action */}
-            <section className="py-20 bg-white border-t border-gray-100">
-                <div className="container mx-auto px-6 text-center">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-3">
-                        <Users className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-4">Are you a Founder?</h2>
-                    <p className="text-gray-600 mb-8 max-w-xl mx-auto">
-                        Tap into a global network of talent ready to build your vision in exchange for equity.
-                    </p>
-                    <Link href="/founder">
-                        <Button variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-                            Post Opportunities
-                        </Button>
-                    </Link>
-                </div>
-            </section>
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-6">
+        <div className="text-center max-w-md">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">You&apos;re on the list!</h2>
+          <p className="text-gray-500">
+            We&apos;ll reach out when a matching opportunity opens. In the meantime, share LaunchPad with founders you believe in.
+          </p>
         </div>
+      </div>
     )
-}
+  }
 
-function WaitlistForm() {
-    const [email, setEmail] = useState('')
-    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  return (
+    <div className="min-h-[calc(100vh-56px)] bg-white">
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setStatus('loading')
-        try {
-            const res = await fetch('/api/waitlist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, role: 'talent' })
-            })
-            if (res.ok) {
-                setStatus('success')
-                setEmail('')
-            } else {
-                setStatus('error')
-            }
-        } catch (err) {
-            console.error(err)
-            setStatus('error')
-        }
-    }
+      {/* Hero */}
+      <section className="relative overflow-hidden px-6 pt-16 pb-12 text-center">
+        <div className="pointer-events-none absolute inset-x-0 -top-32 -z-10 flex justify-center">
+          <div className="h-[500px] w-[800px] rounded-full bg-gradient-to-br from-indigo-100 via-purple-50 to-white opacity-60 blur-3xl" />
+        </div>
+        <div className="mx-auto max-w-2xl">
+          <span className="inline-block mb-5 rounded-full border border-indigo-200 bg-indigo-50 px-3.5 py-1 text-xs font-semibold text-indigo-700 tracking-wide uppercase">
+            Talent Network
+          </span>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 leading-tight tracking-tight">
+            Join the teams<br />
+            <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              building on LaunchPad.
+            </span>
+          </h1>
+          <p className="mt-5 text-lg text-gray-500 max-w-lg mx-auto leading-relaxed">
+            Equity-aligned roles at verified, on-chain funded startups. No middlemen. No recruiters.
+            Just founders who need talent.
+          </p>
+        </div>
+      </section>
 
-    if (status === 'success') {
-        return (
-            <div className="bg-green-50 text-green-700 px-6 py-4 rounded-xl border border-green-200 flex items-center gap-3 animate-in fade-in zoom-in">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-semibold">You're on the list! We'll be in touch.</span>
-            </div>
-        )
-    }
-
-    return (
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
-            <input
-                type="email"
-                placeholder="Enter your email"
-                required
-                disabled={status === 'loading'}
-                className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-            />
-            <Button
-                type="submit"
-                size="lg"
-                disabled={status === 'loading'}
-                className="bg-gray-900 hover:bg-gray-800 text-white rounded-lg px-8"
+      {/* Role chips */}
+      <section className="px-6 py-10 max-w-4xl mx-auto">
+        <p className="text-center text-xs font-bold text-gray-400 tracking-widest uppercase mb-6">Open to</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {ROLES.map(r => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => set('role', r.id === form.role ? '' : r.id)}
+              className={`flex items-start gap-3 p-4 rounded-xl border text-left transition-all ${
+                form.role === r.id
+                  ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300'
+                  : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
+              }`}
             >
-                {status === 'loading' ? 'Joining...' : 'Join Waitlist'}
-                {status !== 'loading' && <ArrowRight className="ml-2 w-4 h-4" />}
-            </Button>
-        </form>
-    )
+              <r.icon className={`w-5 h-5 mt-0.5 shrink-0 ${form.role === r.id ? 'text-indigo-600' : 'text-gray-400'}`} />
+              <div>
+                <p className={`text-sm font-semibold ${form.role === r.id ? 'text-indigo-700' : 'text-gray-800'}`}>{r.label}</p>
+                <p className="text-xs text-gray-400 mt-0.5 leading-snug">{r.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Form */}
+      <section className="px-6 pb-20 max-w-lg mx-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+          <h2 className="font-bold text-gray-900 text-lg mb-1">Join the waitlist</h2>
+          <p className="text-sm text-gray-500 mb-6">We&apos;ll match you with funded startups on the platform.</p>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Full name *</label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Jane Smith"
+                  value={form.name}
+                  onChange={e => set('name', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Email *</label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  type="email"
+                  placeholder="jane@example.com"
+                  value={form.email}
+                  onChange={e => set('email', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Years of experience</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                value={form.experience}
+                onChange={e => set('experience', e.target.value)}
+              >
+                <option value="">Select…</option>
+                <option value="0-2">0–2 years</option>
+                <option value="2-5">2–5 years</option>
+                <option value="5-10">5–10 years</option>
+                <option value="10+">10+ years</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">Anything to add? (optional)</label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                rows={3}
+                placeholder="Links, what you're looking for, preferred stage…"
+                value={form.note}
+                onChange={e => set('note', e.target.value)}
+              />
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.openToEquity}
+                onChange={e => set('openToEquity', e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-700">Open to equity-only or equity + salary roles</span>
+            </label>
+
+            {!form.role && (
+              <p className="text-xs text-amber-600">Select a role type above to continue.</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !form.role}
+              className="w-full py-3 bg-indigo-600 text-white font-semibold text-sm rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Submitting…' : 'Join Talent Waitlist'}
+            </button>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  )
 }

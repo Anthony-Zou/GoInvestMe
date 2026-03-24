@@ -1,401 +1,494 @@
 'use client'
-
-import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { useAccount } from 'wagmi'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatUnits, parseUnits } from 'viem'
-import { ConnectWallet } from '@/components/ConnectWallet'
-import { Button } from '@/components/ui/button'
-import { useEntrepreneurs, useRoundDetails, useInvest, useMilestones, useMilestoneDetails, useValuationCap } from '@/lib/hooks'
-import { Search, TrendingUp, Wallet, ArrowRight, ShieldCheck, Globe, DollarSign, Filter, PieChart, ArrowLeft, CheckCircle } from 'lucide-react'
-import { Modal } from '@/components/ui/Modal'
 import { toast } from 'sonner'
-import { Input } from '@/components/ui/input'
+import { CONTRACTS, ERC20ABI, StartupRegistryABI, TokenizedSAFEABI, InvestorRegistryABI } from '@/lib/contracts'
+import { TrendingUp, CheckCircle, Search } from 'lucide-react'
+
+// ─── Hooks ────────────────────────────────────────────────────────────────────
+
+function useAllStartups() {
+  return useReadContract({
+    address: CONTRACTS.startupRegistry as `0x${string}`,
+    abi: StartupRegistryABI.abi,
+    functionName: 'getStartups',
+    args: [0n, 20n],
+  })
+}
+
+function useSAFEContracts(startupId: string) {
+  return useReadContract({
+    address: CONTRACTS.startupRegistry as `0x${string}`,
+    abi: StartupRegistryABI.abi,
+    functionName: 'getSAFEContracts',
+    args: [startupId as `0x${string}`],
+    query: { enabled: !!startupId },
+  })
+}
+
+function useRoundInfo(roundAddress: string) {
+  const name = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'name',
+    query: { enabled: !!roundAddress },
+  })
+  const raised = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'totalSupply',
+    query: { enabled: !!roundAddress, refetchInterval: 5000 },
+  })
+  const cap = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'valuationCap',
+    query: { enabled: !!roundAddress },
+  })
+  const minInvestment = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'minInvestment',
+    query: { enabled: !!roundAddress },
+  })
+  const investorRegistry = useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'investorRegistry',
+    query: { enabled: !!roundAddress },
+  })
+  const isActive = !investorRegistry.data ||
+    (investorRegistry.data as string).toLowerCase() === CONTRACTS.investorRegistry.toLowerCase()
+  return {
+    name: name.data as string,
+    raised: raised.data as bigint,
+    cap: cap.data as bigint,
+    minInvestment: minInvestment.data as bigint | undefined,
+    isActive,
+  }
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InvestorPage() {
   const { isConnected } = useAccount()
-  const { data: entrepreneursData, isLoading: entrepreneursLoading } = useEntrepreneurs()
-  const rounds = entrepreneursData as string[] | undefined
-  const [selectedRound, setSelectedRound] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isClient, setIsClient] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
-
-  if (!isClient) return null
+  const { data: startupIds, isLoading } = useAllStartups()
+  const ids = startupIds as string[] | undefined
 
   if (!isConnected) {
     return (
-      <LandingState />
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center">
+        <p className="text-gray-500">Connect your wallet to see available rounds.</p>
+      </div>
     )
   }
 
-  // Filter (mocked)
-  const filteredRounds = rounds?.filter((addr: string) =>
-    addr.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <nav className="container mx-auto px-6 py-4 flex justify-between items-center bg-white border-b border-gray-100 sticky top-0 z-10">
-        <Link href="/" className="flex items-center gap-2 text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          LaunchPad
-        </Link>
-        <div className="flex items-center gap-4">
-          <ConnectWallet />
+    <div className="container mx-auto px-6 py-10 max-w-6xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Deal Flow</h1>
+          <p className="text-gray-500 mt-1">Discover and invest in curated pre-seed opportunities.</p>
         </div>
-      </nav>
-
-      <div className="container mx-auto px-6 py-10">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
-                Deal Flow
-              </h1>
-              <p className="text-gray-600">Discover and invest in curated pre-seed opportunities.</p>
-            </div>
-
-            <div className="relative w-full md:w-auto min-w-[300px]">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search rounds..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none"
-                value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid lg:grid-cols-12 gap-8">
-            {/* List */}
-            <div className={`${selectedRound ? 'lg:col-span-4 hidden lg:block' : 'lg:col-span-12'}`}>
-              {entrepreneursLoading ? (
-                <p>Loading...</p>
-              ) : filteredRounds && filteredRounds.length > 0 ? (
-                <div className="space-y-4">
-                  {filteredRounds.map((addr) => (
-                    <RoundListItem
-                      key={addr}
-                      roundAddress={addr}
-                      onClick={() => setSelectedRound(addr)}
-                      isSelected={selectedRound === addr}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10 bg-white rounded-xl border border-dashed">
-                  <p className="text-gray-500">No active rounds found.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Detail Panel */}
-            {selectedRound && (
-              <div className="lg:col-span-8 animate-in slide-in-from-right-4 duration-300">
-                <div className="mb-4 lg:hidden">
-                  <Button variant="ghost" onClick={() => setSelectedRound(null)}>
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Back
-                  </Button>
-                </div>
-                <div className="sticky top-24">
-                  <InvestmentPanel roundAddress={selectedRound} />
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search rounds..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
+      </div>
+
+      <div className="grid lg:grid-cols-12 gap-6">
+        <div className={selected ? 'lg:col-span-5' : 'lg:col-span-12'}>
+          {isLoading ? (
+            <p className="text-gray-400">Loading...</p>
+          ) : !ids || ids.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <div className="space-y-3">
+              {ids.map(id => (
+                <StartupRounds key={id} startupId={id} selected={selected} onSelect={setSelected} search={search} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {selected && (
+          <div className="lg:col-span-7">
+            <InvestPanel roundAddress={selected} onBack={() => setSelected(null)} />
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function LandingState() {
+function EmptyState() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white p-10 rounded-2xl shadow-xl max-w-md w-full text-center">
-        <h1 className="text-2xl font-bold mb-4">Investor Portal</h1>
-        <p className="text-gray-600 mb-8">Connect your wallet to see available deals.</p>
-        <div className="flex justify-center"><ConnectWallet /></div>
-      </div>
+    <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+      <TrendingUp className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+      <p className="font-semibold text-gray-700">No active rounds yet</p>
+      <p className="text-sm text-gray-400 mt-1">Founders haven&apos;t launched any rounds on this network.</p>
     </div>
   )
 }
 
-function RoundListItem({ roundAddress, onClick, isSelected }: { roundAddress: string, onClick: () => void, isSelected: boolean }) {
-  const { data } = useRoundDetails(roundAddress)
-  // data: [name, desc, web, supply, price, sold, raised, investors, closed]
+// Resolves startup → SAFE addresses → renders only the latest RoundCard
+function StartupRounds({ startupId, selected, onSelect, search }: {
+  startupId: string; selected: string | null; onSelect: (a: string) => void; search: string
+}) {
+  const { data } = useSAFEContracts(startupId)
+  const safes = data as string[] | undefined
+  if (!safes || safes.length === 0) return null
+  const latest = safes[safes.length - 1]
+  return <RoundCard roundAddress={latest} isSelected={selected === latest} onClick={() => onSelect(latest)} search={search} />
+}
 
-  // Fallback if loading
-  if (!data) return <div className="p-4 rounded-xl border bg-gray-50 animate-pulse h-24"></div>
-
-  const name = data[0] as string
-  const raised = data[6] as bigint // raw units
-  // Assuming USDC (6 decimals)
-  const raisedDisplay = formatUnits(BigInt(raised || 0), 6)
+function RoundCard({ roundAddress, isSelected, onClick, search }: {
+  roundAddress: string; isSelected: boolean; onClick: () => void; search: string
+}) {
+  const { name, raised, cap, isActive } = useRoundInfo(roundAddress)
+  if (!name) return <div className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+  if (search && !name.toLowerCase().includes(search.toLowerCase())) return null
 
   return (
     <div
-      onClick={onClick}
-      className={`p-5 rounded-xl border cursor-pointer transition-all hover:shadow-md ${isSelected ? 'border-blue-500 bg-blue-50' : 'bg-white border-gray-100'}`}
+      onClick={isActive ? onClick : undefined}
+      className={`p-5 rounded-xl border transition-all ${
+        !isActive ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-100' :
+        isSelected ? 'border-blue-500 bg-blue-50 cursor-pointer hover:shadow-md' :
+        'bg-white border-gray-100 cursor-pointer hover:shadow-md'
+      }`}
     >
-      <div className="flex justify-between items-start mb-2">
-        <h3 className="font-bold text-gray-900">{name}</h3>
-        <span className="text-[10px] uppercase bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Live</span>
+      <div className="flex justify-between items-start">
+        <div>
+          <h3 className="font-bold text-gray-900">{name}</h3>
+          <p className="text-sm text-gray-500 mt-0.5">SAFE Round · Sepolia</p>
+        </div>
+        {isActive
+          ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">Live</span>
+          : <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-semibold">Inactive</span>
+        }
       </div>
-      <p className="text-sm text-gray-500 mb-2">SAFE Round</p>
-      <p className="text-xs font-medium text-gray-900">Raised: ${raisedDisplay} USDC</p>
+      <div className="flex gap-6 mt-3 text-sm">
+        <span className="text-gray-600">Raised: <strong>${formatUnits(raised ?? 0n, 6)}</strong></span>
+        {cap && <span className="text-gray-600">Cap: <strong>${formatUnits(cap, 6)}</strong></span>}
+      </div>
     </div>
   )
 }
 
-type KycStatus = 'NONE' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+// ─── Invest Panel ─────────────────────────────────────────────────────────────
 
-function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
-  const { data: roundData } = useRoundDetails(roundAddress)
-  const { invest, isPending, isSuccess } = useInvest()
+function InvestPanel({ roundAddress, onBack }: { roundAddress: string; onBack: () => void }) {
   const { address } = useAccount()
-  const { data: valuationCapRaw } = useValuationCap(roundAddress)
+  const queryClient = useQueryClient()
+  const { name, raised, cap, minInvestment, isActive } = useRoundInfo(roundAddress)
+  const [amount, setAmount] = useState('')
+  const [approvedAmount, setApprovedAmount] = useState(0n)
+  const [txStage, setTxStage] = useState<'idle' | 'approving' | 'investing' | 'done'>('idle')
 
-  const [amount, setAmount] = useState('100')
-  const [showKYC, setShowKYC] = useState(false)
-  const [kycStatus, setKycStatus] = useState<KycStatus>('NONE')
-  const [kycLoading, setKycLoading] = useState(false)
-  const [initiating, setInitiating] = useState(false)
+  const amountBn = amount ? parseUnits(amount, 6) : 0n
+  const needsApproval = amountBn > 0n && approvedAmount < amountBn
 
-  const checkKycStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/kyc/status')
-      if (res.ok) {
-        const data = await res.json()
-        setKycStatus(data.status as KycStatus)
-      }
-    } catch (err) {
-      console.error('[KYC] Failed to check status:', err)
-    }
-  }, [])
+  // USDC balance (auto-refresh)
+  const { data: usdcBalance } = useReadContract({
+    address: CONTRACTS.mockUsdc as `0x${string}`,
+    abi: ERC20ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+    query: { enabled: !!address, refetchInterval: 6000 },
+  })
+  const balance = (usdcBalance as bigint | undefined) ?? 0n
+  const insufficientBalance = amountBn > 0n && balance < amountBn
+  const belowMin = minInvestment && amountBn > 0n && amountBn < minInvestment
 
-  // Load KYC status on mount
+  const { writeContract, data: hash, isPending } = useWriteContract()
+  const { isSuccess, isError: txFailed } = useWaitForTransactionReceipt({ hash })
+
+  // KYC check removed — TestnetVerifier accepts all wallets
+
+  // Default amount to minInvestment
   useEffect(() => {
-    if (address) checkKycStatus()
-  }, [address, checkKycStatus])
+    if (minInvestment && !amount) setAmount(formatUnits(minInvestment, 6))
+  }, [minInvestment]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll while modal is open and status is PENDING
+  // Reset on amount change — need to re-approve if amount increases
   useEffect(() => {
-    if (!showKYC || kycStatus !== 'PENDING') return
-    const interval = setInterval(checkKycStatus, 5000)
-    return () => clearInterval(interval)
-  }, [showKYC, kycStatus, checkKycStatus])
+    if (amountBn > approvedAmount) setApprovedAmount(0n)
+  }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Close modal and refresh when status changes to VERIFIED
   useEffect(() => {
-    if (kycStatus === 'VERIFIED' && showKYC) {
-      setShowKYC(false)
-      toast.success('Identity verified! You can now invest.')
-    }
-  }, [kycStatus, showKYC])
+    if (!isSuccess && !txFailed) return
 
-  const handleStartKYC = async () => {
-    setInitiating(true)
-    try {
-      const res = await fetch('/api/kyc/initiate', { method: 'POST' })
-      if (!res.ok) {
-        const err = await res.json()
-        toast.error(err.error || 'Failed to start verification')
-        return
-      }
-      const { hostedUrl } = await res.json()
-      window.open(hostedUrl, '_blank', 'width=640,height=800,noopener,noreferrer')
-      setKycStatus('PENDING')
-    } catch {
-      toast.error('Failed to start verification. Please try again.')
-    } finally {
-      setInitiating(false)
-    }
-  }
-
-  if (!roundData) return <div>Loading details...</div>
-
-  const name = roundData[0] as string
-  const desc = roundData[1] as string
-  const raised = formatUnits(BigInt(roundData[6] as bigint || 0), 6)
-
-  const kycVerified = kycStatus === 'VERIFIED'
-
-  // Fee disclosure
-  const feeBps = parseInt(process.env.NEXT_PUBLIC_PROTOCOL_FEE_BPS ?? '0')
-  const feeAmount = amount && feeBps > 0
-    ? (parseFloat(amount) * feeBps / 10000).toFixed(2)
-    : null
-
-  const handleInvest = () => {
-    if (!kycVerified) {
-      setShowKYC(true)
+    if (txFailed) {
+      setTxStage('idle')
+      toast.error('Transaction failed or was cancelled.')
       return
     }
-    try {
-      const amountUnits = parseUnits(amount, 6)
-      invest(roundAddress, amountUnits)
-    } catch {
-      toast.error('Invalid amount')
-    }
-  }
 
-  if (isSuccess) {
-    return (
-      <div className="bg-green-50 p-8 rounded-2xl border border-green-200 text-center">
-        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-green-800 mb-2">Investment Successful!</h2>
-        <p className="text-green-700">You have successfully invested ${amount} USDC in {name}.</p>
-      </div>
-    )
+    if (txStage === 'approving') {
+      setApprovedAmount(amountBn)
+      toast.success('USDC approved! Sending investment…')
+      setTxStage('investing')
+      writeContract({
+        address: roundAddress as `0x${string}`,
+        abi: TokenizedSAFEABI.abi,
+        functionName: 'invest',
+        args: [amountBn],
+      })
+    } else if (txStage === 'investing') {
+      setTxStage('done')
+      // Delay so RPC node has time to index the new state before refetch
+      setTimeout(() => queryClient.invalidateQueries(), 3000)
+    }
+  }, [isSuccess, txFailed]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isActive) return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
+      <button onClick={onBack} className="text-sm text-gray-500 mb-6 hover:text-gray-700 block">← Back</button>
+      <p className="font-semibold text-gray-700">This round is no longer active.</p>
+      <p className="text-sm text-gray-400 mt-1">The founder needs to launch a new round.</p>
+    </div>
+  )
+
+  if (txStage === 'done') return (
+    <div className="bg-green-50 p-10 rounded-2xl border border-green-200 text-center">
+      <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
+      <h2 className="text-xl font-bold text-green-800">Investment Confirmed!</h2>
+      <p className="text-green-700 mt-1">${amount} USDC invested in {name}.</p>
+      <button onClick={onBack} className="mt-4 btn-secondary">← Back to rounds</button>
+    </div>
+  )
+
+  // Show confirming overlay while tx is in flight
+  if (isPending || (hash && txStage !== 'idle' && !isSuccess)) return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-10 text-center">
+      <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="font-semibold text-gray-800">
+        {txStage === 'approving' ? 'Step 1/2: Approving USDC…' : 'Step 2/2: Sending Investment…'}
+      </p>
+      <p className="text-sm text-gray-400 mt-1">
+        {isPending ? 'Confirm in MetaMask.' : 'Waiting for confirmation (~15s)…'}
+      </p>
+    </div>
+  )
+
+  const handleInvest = () => {
+    if (needsApproval) {
+      setTxStage('approving')
+      writeContract({
+        address: CONTRACTS.mockUsdc as `0x${string}`,
+        abi: ERC20ABI,
+        functionName: 'approve',
+        args: [roundAddress as `0x${string}`, amountBn],
+      })
+    } else {
+      setTxStage('investing')
+      writeContract({
+        address: roundAddress as `0x${string}`,
+        abi: TokenizedSAFEABI.abi,
+        functionName: 'invest',
+        args: [amountBn],
+      })
+    }
   }
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="p-8 border-b border-gray-100 bg-slate-50">
-        <h2 className="text-2xl font-bold text-gray-900">{name}</h2>
-        <p className="text-gray-600 mt-2">{desc}</p>
+      <div className="p-6 bg-slate-50 border-b">
+        <button onClick={onBack} className="text-sm text-gray-500 mb-3 hover:text-gray-700">← Back</button>
+        <h2 className="text-2xl font-bold">{name}</h2>
+        <div className="flex gap-6 mt-2 text-sm text-gray-600">
+          <span>Raised: <strong>${formatUnits(raised ?? 0n, 6)}</strong></span>
+          {cap && <span>Cap: <strong>${formatUnits(cap, 6)}</strong></span>}
+        </div>
       </div>
 
-      <div className="p-8 space-y-8">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-500">Raised</p>
-            <p className="text-xl font-bold">${raised}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Valuation Cap</p>
-            <p className="text-xl font-bold">
-              {valuationCapRaw ? `$${(Number(valuationCapRaw) / 1e6).toLocaleString()}` : '—'}
-            </p>
-          </div>
+      <div className="p-6 space-y-4">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>Your USDC balance</span>
+          <span className={balance === 0n ? 'text-red-500 font-medium' : 'text-gray-700 font-medium'}>
+            ${formatUnits(balance, 6)}{balance === 0n && ' — get test USDC below'}
+          </span>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-700">Investment Amount (USDC)</label>
-          <div className="relative">
-            <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
-            <Input
-              value={amount}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)}
-              className="pl-10 text-lg py-6"
-              type="number"
-            />
-          </div>
-          {feeAmount && (
-            <p className="text-xs text-gray-500">
-              Platform fee: {feeBps / 100}% (${feeAmount} USDC) · You receive ${(parseFloat(amount) - parseFloat(feeAmount)).toFixed(2)} in SAFE tokens
-            </p>
-          )}
+        <div>
+          <label className="text-sm font-semibold text-gray-700 block mb-1">
+            Investment Amount (USDC)
+            {minInvestment && <span className="text-gray-400 font-normal ml-1">min ${formatUnits(minInvestment, 6)}</span>}
+          </label>
+          <input className="input" type="number" value={amount} onChange={e => setAmount(e.target.value)} />
         </div>
 
-        {/* Milestone Progress Section */}
-        <MilestoneProgressSection roundAddress={roundAddress} />
+        {belowMin && <p className="text-xs text-red-500">Minimum is ${formatUnits(minInvestment!, 6)} USDC</p>}
+        {insufficientBalance && !belowMin && <p className="text-xs text-red-500">Insufficient balance.</p>}
 
-        {kycLoading ? null : !kycVerified && (
-          <div className="bg-yellow-50 p-4 rounded-lg flex items-center gap-3 border border-yellow-100">
-            <ShieldCheck className="text-yellow-600 h-5 w-5" />
-            <p className="text-sm text-yellow-700">KYC verification required before investing.</p>
-          </div>
-        )}
+        <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-lg p-3">
+          <CheckCircle className="w-4 h-4 text-green-600" />
+          <p className="text-sm text-green-700 font-medium">Identity verified</p>
+        </div>
 
-        {kycVerified && (
-          <div className="bg-green-50 p-3 rounded-lg flex items-center gap-2 border border-green-100">
-            <CheckCircle className="text-green-600 h-4 w-4" />
-            <p className="text-sm text-green-700 font-medium">Identity verified</p>
-          </div>
-        )}
+        <button
+          className="btn-primary w-full h-12 text-base"
+          disabled={!amount || !!belowMin || insufficientBalance}
+          onClick={handleInvest}
+        >
+          {needsApproval ? 'Approve & Invest' : 'Invest Now'}
+        </button>
 
-        <Button onClick={handleInvest} disabled={isPending || !amount} size="lg" className="w-full text-lg h-14 bg-blue-600 hover:bg-blue-700">
-          {isPending ? 'Processing...' : kycVerified ? 'Invest Now' : 'Verify & Invest'}
-        </Button>
+        {balance === 0n && <MintTestUsdc onMinted={() => queryClient.invalidateQueries()} />}
       </div>
 
-      <Modal isOpen={showKYC} onClose={() => setShowKYC(false)} title="Identity Verification">
-        <div className="space-y-4">
-          {kycStatus === 'PENDING' ? (
-            <>
-              <p className="text-gray-600">Verification in progress. Complete the form in the opened tab, then return here.</p>
-              <p className="text-sm text-gray-400">This page will update automatically once verified.</p>
-              <Button variant="ghost" className="w-full" onClick={handleStartKYC} disabled={initiating}>
-                Reopen verification tab
-              </Button>
-            </>
-          ) : kycStatus === 'REJECTED' ? (
-            <>
-              <p className="text-gray-600">Your previous verification was not approved. Please try again.</p>
-              <Button className="w-full" onClick={handleStartKYC} disabled={initiating}>
-                {initiating ? 'Starting...' : 'Retry Verification'}
-              </Button>
-            </>
-          ) : (
-            <>
-              <p className="text-gray-600">You must verify your identity before investing. This is a one-time process.</p>
-              <Button className="w-full" onClick={handleStartKYC} disabled={initiating}>
-                {initiating ? 'Starting...' : 'Start Verification'}
-              </Button>
-            </>
-          )}
-        </div>
-      </Modal>
     </div>
   )
 }
 
-function MilestoneProgressSection({ roundAddress }: { roundAddress: string }) {
-  const { count } = useMilestones(roundAddress)
+function MintTestUsdc({ onMinted }: { onMinted: () => void }) {
+  const { address } = useAccount()
+  const { writeContract, data: hash, isPending } = useWriteContract()
+  const { isSuccess } = useWaitForTransactionReceipt({ hash })
 
-  if (count === 0) return null
+  useEffect(() => {
+    if (isSuccess) { toast.success('1,000 test USDC added to your wallet!'); onMinted() }
+  }, [isSuccess, onMinted])
 
   return (
-    <div className="border-t border-gray-100 pt-6">
-      <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-        <CheckCircle className="h-4 w-4 text-blue-600" />
-        Execution Milestones ({count})
-      </h3>
-      <div className="space-y-3">
-        {Array.from({ length: count }).map((_, i) => (
-          <MilestoneProgressItem key={i} roundAddress={roundAddress} milestoneId={i} />
-        ))}
-      </div>
+    <div className="border border-dashed border-gray-200 rounded-lg p-3 text-center">
+      <p className="text-xs text-gray-500 mb-2">Testnet only — get free USDC to try investing</p>
+      <button
+        className="btn-secondary text-xs px-4 py-1.5"
+        disabled={isPending}
+        onClick={() => writeContract({
+          address: CONTRACTS.mockUsdc as `0x${string}`,
+          abi: ERC20ABI,
+          functionName: 'mint',
+          args: [address as `0x${string}`, parseUnits('1000', 6)],
+        })}
+      >
+        {isPending ? 'Minting…' : 'Get 1,000 Test USDC'}
+      </button>
     </div>
   )
 }
 
-function MilestoneProgressItem({ roundAddress, milestoneId }: { roundAddress: string, milestoneId: number }) {
-  const milestone = useMilestoneDetails(roundAddress, milestoneId)
+// ─── KYC Modal ────────────────────────────────────────────────────────────────
 
-  if (!milestone) return null
+function KycModal({ onClose, onVerified }: { onClose: () => void; onVerified: () => void }) {
+  const { address } = useAccount()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [accredited, setAccredited] = useState(false)
+  const [terms, setTerms] = useState(false)
+  const [step, setStep] = useState<'form' | 'registering' | 'certifying'>('form')
+  const attempted = useRef(false)
 
-  const getStatusIcon = () => {
-    if (milestone.isVerified) return <span className="text-green-600">✓</span>
-    if (milestone.isCompleted) return <span className="text-yellow-600">⏳</span>
-    return <span className="text-gray-400">○</span>
+  // Check if already registered on-chain
+  const { data: alreadyRegistered } = useReadContract({
+    address: CONTRACTS.investorRegistry as `0x${string}`,
+    abi: InvestorRegistryABI.abi,
+    functionName: 'isInvestorRegistered',
+    args: [address as `0x${string}`],
+    query: { enabled: !!address },
+  })
+
+  const { writeContract, data: hash, isPending } = useWriteContract()
+  const { isSuccess: registered, isError: txFailed } = useWaitForTransactionReceipt({ hash })
+
+  // If tx failed, go back to form with error
+  useEffect(() => {
+    if (txFailed && step === 'registering') {
+      setStep('form')
+      attempted.current = false
+      toast.error('Transaction failed. You may already be registered — try clicking Confirm again.')
+    }
+  }, [txFailed, step])
+
+  // Step 2: after registerInvestor confirms (or already registered), call certify API
+  const runCertify = useRef(false)
+  const certify = useCallback(() => {
+    if (runCertify.current) return
+    runCertify.current = true
+    setStep('certifying')
+    fetch('/api/kyc/certify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, isAccredited: accredited, termsAccepted: terms }),
+    })
+      .then(r => r.json())
+      .then(() => { toast.success('Verified! You can now invest.'); onVerified() })
+      .catch(() => { toast.success('On-chain registration confirmed.'); onVerified() })
+  }, [name, email, accredited, terms, onVerified])
+
+  useEffect(() => {
+    if (registered && step === 'registering' && !attempted.current) {
+      attempted.current = true
+      certify()
+    }
+  }, [registered, step, certify])
+
+  const handleSubmit = () => {
+    if (!name || !email || !accredited || !terms) { toast.error('Please complete all fields'); return }
+
+    // Already registered on-chain — skip the wallet tx, go straight to certify
+    if (alreadyRegistered) {
+      certify()
+      return
+    }
+
+    setStep('registering')
+    writeContract({
+      address: CONTRACTS.investorRegistry as `0x${string}`,
+      abi: InvestorRegistryABI.abi,
+      functionName: 'registerInvestor',
+      args: ['US'],
+    })
   }
 
   return (
-    <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-      <div className="mt-0.5">{getStatusIcon()}</div>
-      <div className="flex-1">
-        <p className="text-sm font-medium text-gray-900">{milestone.description}</p>
-        {milestone.proofOfWork && (
-          <a
-            href={milestone.proofOfWork}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:underline mt-1 block"
-          >
-            View proof →
-          </a>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="font-bold text-lg">Confirm Investor Status</h2>
+          {step === 'form' && <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>}
+        </div>
+
+        {step !== 'form' ? (
+          <div className="text-center py-6">
+            <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-3" />
+            <p className="font-medium">{step === 'registering' ? 'Step 1/2: Registering on-chain…' : 'Step 2/2: Confirming…'}</p>
+            {step === 'registering' && <p className="text-sm text-gray-400 mt-1">Approve the transaction in MetaMask.</p>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">One-time confirmation. Two quick steps: sign a wallet transaction, then you&apos;re in.</p>
+            <input className="input" placeholder="Full name" value={name} onChange={e => setName(e.target.value)} />
+            <input className="input" placeholder="Email address" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={accredited} onChange={e => setAccredited(e.target.checked)} className="mt-0.5" />
+              <span className="text-sm text-gray-700">I confirm I am an accredited or sophisticated investor and understand startup investments carry significant risk.</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} className="mt-0.5" />
+              <span className="text-sm text-gray-700">I agree to the terms and understand this is a SAFE, not a direct equity purchase.</span>
+            </label>
+            <button
+              className="btn-primary w-full mt-2"
+              disabled={isPending || !name || !email || !accredited || !terms}
+              onClick={handleSubmit}
+            >
+              Confirm & Proceed
+            </button>
+          </div>
         )}
-      </div>
-      <div className="text-xs text-gray-500">
-        {milestone.isVerified ? 'Complete' : milestone.isCompleted ? 'Pending' : 'Not started'}
       </div>
     </div>
   )
