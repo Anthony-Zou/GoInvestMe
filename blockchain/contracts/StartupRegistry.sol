@@ -18,7 +18,9 @@ interface ITokenizedSAFE {
         uint256 _discountRate,
         uint256 _minInvestment,
         uint256 _maxInvestment,
-        uint256 _roundDuration
+        uint256 _roundDuration,
+        address _protocolTreasury,
+        uint256 _feeBps
     ) external;
 }
 
@@ -75,6 +77,8 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
     address public usdcToken;
     address public investorRegistry;
     address public protocolAdmin; // Protocol controller
+    address public protocolTreasury; // Fee recipient
+    uint256 public protocolFeeBps;   // Fee in basis points (e.g. 100 = 1%)
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -352,6 +356,17 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
     }
 
     /**
+     * @notice Configure protocol fee settings (ADMIN_ROLE only)
+     * @param _treasury Address to receive protocol fees
+     * @param _feeBps Fee in basis points (e.g. 100 = 1%)
+     */
+    function setFeeConfig(address _treasury, uint256 _feeBps) external onlyRole(ADMIN_ROLE) {
+        require(_feeBps <= 1000, "Fee exceeds maximum");
+        protocolTreasury = _treasury;
+        protocolFeeBps = _feeBps;
+    }
+
+    /**
      * @notice Create a new funding round (SAFE)
      * @param _startupId Startup identifier
      * @param _valuationCap Valuation cap
@@ -382,19 +397,20 @@ contract StartupRegistry is Initializable, AccessControlUpgradeable, UUPSUpgrade
         string memory symbol = "SAFE"; // Simplified for now
 
         // Initialize the new SAFE
-        // Initialize the new SAFE
         ITokenizedSAFE(roundAddress).initialize(
             name,
             symbol,
             usdcToken,
             investorRegistry,
-            msg.sender, // Founder
+            msg.sender,    // Founder
             protocolAdmin, // Protocol Admin
             _valuationCap,
             _discountRate,
             _minInvestment,
             _maxInvestment,
-            _roundDuration
+            _roundDuration,
+            protocolTreasury,
+            protocolFeeBps
         );
 
         // Track the round

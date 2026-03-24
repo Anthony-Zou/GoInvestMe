@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAccount } from 'wagmi'
 import { formatEther, parseEther } from 'viem'
@@ -35,10 +35,11 @@ export default function FounderPage() {
 
   // 2. Fetch Startup Details
   const { data: startupData, isLoading: loadingDetails } = useStartupDetails(startupId || '')
-  // Struct: [founder, name, cid, kybVerified, regDate, kybTime, isActive, safeContracts]
-  const startupName = startupData ? (startupData as any)[1] : ''
-  const safeContracts = startupData ? (startupData as any)[7] as string[] : []
-  const roundAddress = safeContracts && safeContracts.length > 0 ? safeContracts[0] : null
+  // Struct fields: founderAddress, companyName, dataRoomCID, kybVerified, registrationDate, kybTimestamp, isActive, safeContracts
+  const startup = startupData as unknown as { companyName: string; safeContracts: string[] } | undefined
+  const startupName = startup?.companyName ?? ''
+  const safeContracts = startup?.safeContracts ?? []
+  const roundAddress = safeContracts.length > 0 ? safeContracts[0] : null
 
   // 3. Fetch Round Details
   const { data: roundInfo } = useRoundDetails(roundAddress || '')
@@ -50,16 +51,18 @@ export default function FounderPage() {
   const [showMilestoneModal, setShowMilestoneModal] = useState(false)
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamRefresh, setTeamRefresh] = useState(0)
-  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; role: string; title?: string; equityBps?: number; user?: { profile?: { name?: string } }; inviteEmail?: string }>>([])
 
-  // Fetch team members when startup exists
+  // Fetch team members for CapTable (TeamList manages its own display)
   useEffect(() => {
-    if (startupId) {
-      fetch(`/api/team/${startupId}`)
-        .then(res => res.json())
-        .then(data => setTeamMembers(data.teamMembers || []))
-        .catch(err => console.error('Error fetching team:', err))
-    }
+    if (!startupId) return
+    fetch(`/api/team/${startupId}`)
+      .then(res => res.json())
+      .then(data => setTeamMembers(data.teamMembers || []))
+      .catch(err => {
+        console.error('Error fetching team:', err)
+        toast.error('Failed to load team data')
+      })
   }, [startupId, teamRefresh])
 
   if (!isConnected) {
@@ -219,11 +222,25 @@ function LandingState() {
   )
 }
 
-function StatCard({ icon: Icon, label, value, color }: any) {
+const STAT_COLORS = {
+  green:  { bg: 'bg-green-50',  text: 'text-green-600'  },
+  blue:   { bg: 'bg-blue-50',   text: 'text-blue-600'   },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-600' },
+} as const
+
+interface StatCardProps {
+  icon: React.ElementType
+  label: string
+  value: string
+  color: keyof typeof STAT_COLORS
+}
+
+function StatCard({ icon: Icon, label, value, color }: StatCardProps) {
+  const { bg, text } = STAT_COLORS[color]
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-${color}-50`}>
-        <Icon className={`h-5 w-5 text-${color}-600`} />
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${bg}`}>
+        <Icon className={`h-5 w-5 ${text}`} />
       </div>
       <p className="text-sm text-gray-500 font-medium">{label}</p>
       <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
@@ -393,6 +410,10 @@ function RegisterStartupModal({ open, onOpenChange }: { open: boolean, onOpenCha
 function CreateRoundModal({ open, onOpenChange, startupId }: { open: boolean, onOpenChange: (open: boolean) => void, startupId: string }) {
   const { createRound, isPending, isSuccess } = useCreateRound()
   const [cap, setCap] = useState('')
+  const [discount, setDiscount] = useState('20')
+  const [minInvest, setMinInvest] = useState('1000')
+  const [maxInvest, setMaxInvest] = useState('100000')
+  const [durationDays, setDurationDays] = useState('90')
 
   useEffect(() => {
     if (isSuccess) {
@@ -402,23 +423,45 @@ function CreateRoundModal({ open, onOpenChange, startupId }: { open: boolean, on
   }, [isSuccess, onOpenChange])
 
   const handleCreate = () => {
+    if (!cap || !minInvest || !maxInvest || !durationDays) {
+      toast.error('Please fill in all fields')
+      return
+    }
     createRound(
       startupId,
-      parseEther(cap || '5000000').toString(),
-      0,
-      parseEther('100').toString(),
-      parseEther('100000').toString(),
-      30 * 24 * 60 * 60
+      (parseFloat(cap) * 1e6).toString(),           // USDC 6 decimals
+      Math.round(parseFloat(discount) * 100),        // basis points (number)
+      (parseFloat(minInvest) * 1e6).toString(),
+      (parseFloat(maxInvest) * 1e6).toString(),
+      parseInt(durationDays) * 24 * 60 * 60
     )
   }
 
   return (
     <Modal isOpen={open} onClose={() => onOpenChange(false)} title="Launch Funding Round">
       <div className="space-y-4">
-        <p className="text-sm text-gray-500">Deploy a compliant SAFE contract.</p>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Valuation Cap (USDC)</label>
-          <Input type="number" value={cap} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCap(e.target.value)} placeholder="5000000" />
+        <p className="text-sm text-gray-500">Deploy a compliant SAFE contract on-chain.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2 col-span-2">
+            <label className="text-sm font-medium">Valuation Cap (USDC)</label>
+            <Input type="number" value={cap} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCap(e.target.value)} placeholder="5000000" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Discount Rate (%)</label>
+            <Input type="number" value={discount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscount(e.target.value)} placeholder="20" min="0" max="50" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Duration (days)</label>
+            <Input type="number" value={durationDays} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDurationDays(e.target.value)} placeholder="90" min="1" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Min Investment (USDC)</label>
+            <Input type="number" value={minInvest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinInvest(e.target.value)} placeholder="1000" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Max Investment (USDC)</label>
+            <Input type="number" value={maxInvest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxInvest(e.target.value)} placeholder="100000" />
+          </div>
         </div>
         <Button onClick={handleCreate} disabled={isPending || !cap} className="w-full">
           {isPending ? 'Deploying...' : 'Launch Round'}

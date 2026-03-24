@@ -33,6 +33,12 @@ export function SubmitProofModal({
             toast.error('Please provide a proof URL')
             return
         }
+        try {
+            new URL(proofUrl)
+        } catch {
+            toast.error('Please enter a valid URL (e.g. https://github.com/...)')
+            return
+        }
         submitProof(roundAddress, BigInt(milestoneId), proofUrl)
     }
 

@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useAccount } from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
 import { ConnectWallet } from '@/components/ConnectWallet'
 import { Button } from '@/components/ui/button'
-import { useEntrepreneurs, useRoundDetails, useInvest } from '@/lib/hooks'
+import { useEntrepreneurs, useRoundDetails, useInvest, useMilestones, useMilestoneDetails, useValuationCap } from '@/lib/hooks'
 import { Search, TrendingUp, Wallet, ArrowRight, ShieldCheck, Globe, DollarSign, Filter, PieChart, ArrowLeft, CheckCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from 'sonner'
@@ -153,14 +153,70 @@ function RoundListItem({ roundAddress, onClick, isSelected }: { roundAddress: st
   )
 }
 
+type KycStatus = 'NONE' | 'PENDING' | 'VERIFIED' | 'REJECTED'
+
 function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
   const { data: roundData } = useRoundDetails(roundAddress)
   const { invest, isPending, isSuccess } = useInvest()
+  const { address } = useAccount()
+  const { data: valuationCapRaw } = useValuationCap(roundAddress)
 
-  // State
-  const [amount, setAmount] = useState('100') // USDC
+  const [amount, setAmount] = useState('100')
   const [showKYC, setShowKYC] = useState(false)
-  const [kycVerified, setKycVerified] = useState(false) // Mock
+  const [kycStatus, setKycStatus] = useState<KycStatus>('NONE')
+  const [kycLoading, setKycLoading] = useState(false)
+  const [initiating, setInitiating] = useState(false)
+
+  const checkKycStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/kyc/status')
+      if (res.ok) {
+        const data = await res.json()
+        setKycStatus(data.status as KycStatus)
+      }
+    } catch (err) {
+      console.error('[KYC] Failed to check status:', err)
+    }
+  }, [])
+
+  // Load KYC status on mount
+  useEffect(() => {
+    if (address) checkKycStatus()
+  }, [address, checkKycStatus])
+
+  // Poll while modal is open and status is PENDING
+  useEffect(() => {
+    if (!showKYC || kycStatus !== 'PENDING') return
+    const interval = setInterval(checkKycStatus, 5000)
+    return () => clearInterval(interval)
+  }, [showKYC, kycStatus, checkKycStatus])
+
+  // Close modal and refresh when status changes to VERIFIED
+  useEffect(() => {
+    if (kycStatus === 'VERIFIED' && showKYC) {
+      setShowKYC(false)
+      toast.success('Identity verified! You can now invest.')
+    }
+  }, [kycStatus, showKYC])
+
+  const handleStartKYC = async () => {
+    setInitiating(true)
+    try {
+      const res = await fetch('/api/kyc/initiate', { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json()
+        toast.error(err.error || 'Failed to start verification')
+        return
+      }
+      const { hostedUrl } = await res.json()
+      window.open(hostedUrl, '_blank', 'width=640,height=800,noopener,noreferrer')
+      setKycStatus('PENDING')
+    } catch {
+      toast.error('Failed to start verification. Please try again.')
+    } finally {
+      setInitiating(false)
+    }
+  }
 
   if (!roundData) return <div>Loading details...</div>
 
@@ -168,17 +224,24 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
   const desc = roundData[1] as string
   const raised = formatUnits(BigInt(roundData[6] as bigint || 0), 6)
 
+  const kycVerified = kycStatus === 'VERIFIED'
+
+  // Fee disclosure
+  const feeBps = parseInt(process.env.NEXT_PUBLIC_PROTOCOL_FEE_BPS ?? '0')
+  const feeAmount = amount && feeBps > 0
+    ? (parseFloat(amount) * feeBps / 10000).toFixed(2)
+    : null
+
   const handleInvest = () => {
     if (!kycVerified) {
       setShowKYC(true)
       return
     }
-    // Convert input USDC string to BigInt (6 decimals)
     try {
       const amountUnits = parseUnits(amount, 6)
       invest(roundAddress, amountUnits)
-    } catch (e) {
-      toast.error("Invalid amount")
+    } catch {
+      toast.error('Invalid amount')
     }
   }
 
@@ -207,11 +270,13 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
           </div>
           <div>
             <p className="text-sm text-gray-500">Valuation Cap</p>
-            <p className="text-xl font-bold">$5M</p>
+            <p className="text-xl font-bold">
+              {valuationCapRaw ? `$${(Number(valuationCapRaw) / 1e6).toLocaleString()}` : '—'}
+            </p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           <label className="text-sm font-bold text-gray-700">Investment Amount (USDC)</label>
           <div className="relative">
             <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
@@ -222,15 +287,27 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
               type="number"
             />
           </div>
+          {feeAmount && (
+            <p className="text-xs text-gray-500">
+              Platform fee: {feeBps / 100}% (${feeAmount} USDC) · You receive ${(parseFloat(amount) - parseFloat(feeAmount)).toFixed(2)} in SAFE tokens
+            </p>
+          )}
         </div>
 
         {/* Milestone Progress Section */}
         <MilestoneProgressSection roundAddress={roundAddress} />
 
-        {!kycVerified && (
+        {kycLoading ? null : !kycVerified && (
           <div className="bg-yellow-50 p-4 rounded-lg flex items-center gap-3 border border-yellow-100">
             <ShieldCheck className="text-yellow-600 h-5 w-5" />
-            <p className="text-sm text-yellow-700">KYC Verification required before investing.</p>
+            <p className="text-sm text-yellow-700">KYC verification required before investing.</p>
+          </div>
+        )}
+
+        {kycVerified && (
+          <div className="bg-green-50 p-3 rounded-lg flex items-center gap-2 border border-green-100">
+            <CheckCircle className="text-green-600 h-4 w-4" />
+            <p className="text-sm text-green-700 font-medium">Identity verified</p>
           </div>
         )}
 
@@ -241,12 +318,29 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
 
       <Modal isOpen={showKYC} onClose={() => setShowKYC(false)} title="Identity Verification">
         <div className="space-y-4">
-          <p className="text-gray-600">Simulating KYC Check...</p>
-          <Button className="w-full" onClick={() => {
-            toast.success("Verified!")
-            setKycVerified(true)
-            setShowKYC(false)
-          }}>Complete (Mock)</Button>
+          {kycStatus === 'PENDING' ? (
+            <>
+              <p className="text-gray-600">Verification in progress. Complete the form in the opened tab, then return here.</p>
+              <p className="text-sm text-gray-400">This page will update automatically once verified.</p>
+              <Button variant="ghost" className="w-full" onClick={handleStartKYC} disabled={initiating}>
+                Reopen verification tab
+              </Button>
+            </>
+          ) : kycStatus === 'REJECTED' ? (
+            <>
+              <p className="text-gray-600">Your previous verification was not approved. Please try again.</p>
+              <Button className="w-full" onClick={handleStartKYC} disabled={initiating}>
+                {initiating ? 'Starting...' : 'Retry Verification'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-600">You must verify your identity before investing. This is a one-time process.</p>
+              <Button className="w-full" onClick={handleStartKYC} disabled={initiating}>
+                {initiating ? 'Starting...' : 'Start Verification'}
+              </Button>
+            </>
+          )}
         </div>
       </Modal>
     </div>
@@ -254,7 +348,6 @@ function InvestmentPanel({ roundAddress }: { roundAddress: string }) {
 }
 
 function MilestoneProgressSection({ roundAddress }: { roundAddress: string }) {
-  const { useMilestones, useMilestoneDetails } = require('@/lib/hooks')
   const { count } = useMilestones(roundAddress)
 
   if (count === 0) return null
@@ -275,7 +368,6 @@ function MilestoneProgressSection({ roundAddress }: { roundAddress: string }) {
 }
 
 function MilestoneProgressItem({ roundAddress, milestoneId }: { roundAddress: string, milestoneId: number }) {
-  const { useMilestoneDetails } = require('@/lib/hooks')
   const milestone = useMilestoneDetails(roundAddress, milestoneId)
 
   if (!milestone) return null

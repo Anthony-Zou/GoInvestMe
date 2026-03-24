@@ -244,6 +244,15 @@ export function useSubmitMilestoneProof() {
 }
 
 // Verify a milestone (admin/protocol only)
+export function useValuationCap(roundAddress: string) {
+  return useReadContract({
+    address: roundAddress as `0x${string}`,
+    abi: TokenizedSAFEABI.abi,
+    functionName: 'valuationCap',
+    query: { enabled: !!roundAddress }
+  })
+}
+
 export function useVerifyMilestone() {
   const { writeContract, data: hash, isPending, error } = useWriteContract()
 

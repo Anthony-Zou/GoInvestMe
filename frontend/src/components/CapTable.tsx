@@ -42,7 +42,7 @@ export function CapTable({ teamMembers }: CapTableProps) {
         .map((member, index) => ({
             name: member.user?.profile?.name || member.inviteEmail || 'Team Member',
             equity: member.equityBps! / 100, // Convert basis points to percentage
-            role: member.title || member.role.replace(/_/g, ' '),
+            role: member.title || member.role?.replace(/_/g, ' '),
             color: COLORS[index % COLORS.length]
         }))
 
@@ -80,7 +80,7 @@ export function CapTable({ teamMembers }: CapTableProps) {
                             cx="50%"
                             cy="50%"
                             labelLine={false}
-                            label={({ name, equity }) => `${name}: ${equity.toFixed(1)}%`}
+                            label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(1)}%`}
                             outerRadius={80}
                             fill="#8884d8"
                             dataKey="equity"
@@ -89,7 +89,7 @@ export function CapTable({ teamMembers }: CapTableProps) {
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} />
+                        <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Equity']} />
                     </PieChart>
                 </ResponsiveContainer>
             </div>

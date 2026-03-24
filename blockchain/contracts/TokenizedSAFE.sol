@@ -35,6 +35,10 @@ contract TokenizedSAFE is
     uint256 public roundEndTime;
     address public founderAddress;
 
+    // Protocol fee config
+    address public protocolTreasury;
+    uint256 public feeBps; // basis points, e.g. 100 = 1%
+
     // Milestones
     struct Milestone {
         string description;
@@ -48,6 +52,7 @@ contract TokenizedSAFE is
     uint256 public milestoneCount;
 
     event InvestmentReceived(address indexed investor, uint256 amount, uint256 tokensMinted);
+    event FeeCollected(address indexed treasury, uint256 amount);
     event FundsWithdrawn(address indexed to, uint256 amount);
     event MilestoneCreated(uint256 indexed id, string description, uint256 amount);
     event MilestoneVerified(uint256 indexed id);
@@ -69,7 +74,9 @@ contract TokenizedSAFE is
         uint256 _discountRate,
         uint256 _minInvestment,
         uint256 _maxInvestment,
-        uint256 _roundDuration
+        uint256 _roundDuration,
+        address _protocolTreasury,
+        uint256 _feeBps
     ) public initializer {
         __ERC20_init(name, symbol);
         __AccessControl_init();
@@ -90,6 +97,19 @@ contract TokenizedSAFE is
         minInvestment = _minInvestment;
         maxInvestment = _maxInvestment;
         roundEndTime = block.timestamp + _roundDuration;
+        protocolTreasury = _protocolTreasury;
+        feeBps = _feeBps;
+    }
+
+    /**
+     * @notice Update protocol fee configuration (Protocol Admin only)
+     * @param _treasury Address to receive protocol fees
+     * @param _feeBps Fee in basis points (max 1000 = 10%)
+     */
+    function setFeeConfig(address _treasury, uint256 _feeBps) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_feeBps <= 1000, "Fee exceeds maximum");
+        protocolTreasury = _treasury;
+        feeBps = _feeBps;
     }
 
     function pause() public onlyRole(ADMIN_ROLE) {
@@ -109,13 +129,22 @@ contract TokenizedSAFE is
         require(investorRegistry.isVerified(msg.sender), "Investor not verified");
         // require(investorRegistry.isAccredited(msg.sender), "Investor not accredited"); // Optional based on config
 
-        // Transfer USDC
+        // Transfer full amount from investor
         require(usdcToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
 
-        // Mint SAFE tokens (1:1 with USDC for simplicity in this MVP, logical conversion happens at equity event)
-        _mint(msg.sender, amount);
+        // Deduct protocol fee and send to treasury
+        uint256 fee = 0;
+        if (feeBps > 0 && protocolTreasury != address(0)) {
+            fee = (amount * feeBps) / 10000;
+            require(usdcToken.transfer(protocolTreasury, fee), "Fee transfer failed");
+            emit FeeCollected(protocolTreasury, fee);
+        }
 
-        emit InvestmentReceived(msg.sender, amount, amount);
+        // Mint SAFE tokens 1:1 with net investment held in contract
+        uint256 netAmount = amount - fee;
+        _mint(msg.sender, netAmount);
+
+        emit InvestmentReceived(msg.sender, amount, netAmount);
     }
 
     /**

@@ -153,7 +153,7 @@ function WaitlistForm() {
                 className="bg-gray-900 hover:bg-gray-800 text-white rounded-lg px-8"
             >
                 {status === 'loading' ? 'Joining...' : 'Join Waitlist'}
-                {!status.includes('loading') && <ArrowRight className="ml-2 w-4 h-4" />}
+                {status !== 'loading' && <ArrowRight className="ml-2 w-4 h-4" />}
             </Button>
         </form>
     )

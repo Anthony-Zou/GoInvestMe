@@ -42,7 +42,7 @@ describe("TokenizedSAFE", function () {
         await registry.setVerified(investor2.address, true);
         await registry.setVerified(unverifiedInvestor.address, false);
 
-        // Deploy TokenizedSAFE
+        // Deploy TokenizedSAFE (no fee for base tests)
         TokenizedSAFE = await ethers.getContractFactory("TokenizedSAFE");
         safe = await upgrades.deployProxy(TokenizedSAFE, [
             NAME,
@@ -55,7 +55,9 @@ describe("TokenizedSAFE", function () {
             DISCOUNT,
             MIN_INVEST,
             MAX_INVEST,
-            DURATION
+            DURATION,
+            ethers.ZeroAddress, // _protocolTreasury (disabled)
+            0                   // _feeBps (no fee)
         ], {
             initializer: "initialize",
             kind: "uups",
@@ -155,6 +157,59 @@ describe("TokenizedSAFE", function () {
             await expect(
                 safe.connect(investor1).emergencyWithdraw(investor1.address)
             ).to.be.reverted; // AccessControl revert
+        });
+    });
+
+    describe("Protocol Fee", function () {
+        let treasury;
+
+        beforeEach(async function () {
+            [,,,,,treasury] = await ethers.getSigners();
+        });
+
+        it("Should allow admin to set fee config", async function () {
+            await safe.connect(owner).setFeeConfig(treasury.address, 100); // 1%
+            expect(await safe.protocolTreasury()).to.equal(treasury.address);
+            expect(await safe.feeBps()).to.equal(100);
+        });
+
+        it("Should reject fee config from non-admin", async function () {
+            await expect(
+                safe.connect(founder).setFeeConfig(treasury.address, 100)
+            ).to.be.reverted;
+        });
+
+        it("Should reject fee above maximum (10%)", async function () {
+            await expect(
+                safe.connect(owner).setFeeConfig(treasury.address, 1001)
+            ).to.be.revertedWith("Fee exceeds maximum");
+        });
+
+        it("Should collect fee and emit FeeCollected event on investment", async function () {
+            await safe.connect(owner).setFeeConfig(treasury.address, 100); // 1%
+
+            const amount = ethers.parseUnits("10000", 6);
+            const expectedFee = amount * 100n / 10000n;    // 100 USDC
+            const expectedNet = amount - expectedFee;       // 9900 USDC
+
+            await expect(safe.connect(investor1).invest(amount))
+                .to.emit(safe, "FeeCollected")
+                .withArgs(treasury.address, expectedFee)
+                .and.to.emit(safe, "InvestmentReceived")
+                .withArgs(investor1.address, amount, expectedNet);
+
+            expect(await usdc.balanceOf(treasury.address)).to.equal(expectedFee);
+            expect(await usdc.balanceOf(await safe.getAddress())).to.equal(expectedNet);
+            expect(await safe.balanceOf(investor1.address)).to.equal(expectedNet);
+        });
+
+        it("Should not collect fee when feeBps is 0", async function () {
+            const amount = ethers.parseUnits("5000", 6);
+
+            await expect(safe.connect(investor1).invest(amount))
+                .to.not.emit(safe, "FeeCollected");
+
+            expect(await safe.balanceOf(investor1.address)).to.equal(amount);
         });
     });
 

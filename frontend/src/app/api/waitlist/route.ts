@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
 
 const waitlistSchema = z.object({
     email: z.string().email(),
-    role: z.enum(['talent', 'founder', 'investor']).optional().default('talent')
+    role: z.enum(['talent', 'founder', 'investor']).optional().default('talent'),
+    source: z.string().optional(),
 })
 
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { email, role } = waitlistSchema.parse(body)
+        const { email, role, source } = waitlistSchema.parse(body)
 
-        // TODO: Connect to MongoDB when ready.
-        // For now, valid emails are logged which counts as "captured" for MVP.
-        console.log(`[WAITLIST] New signup: ${email} (${role})`)
+        await prisma.waitlistEntry.upsert({
+            where: { email },
+            create: { email, role, source },
+            update: {},
+        })
 
         return NextResponse.json(
             { message: "You've been added to the waitlist!" },

@@ -151,7 +151,17 @@ model Verification {
   providerId  String?   // External reference ID
   status      KycStatus @default(PENDING)
   data        Json?     // Webhook payload or metadata
-  
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([userId, type])
+}
+
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      String   @default("talent")
+  source    String?
+  createdAt DateTime @default(now())
 }
