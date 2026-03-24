@@ -1,43 +1,25 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import { Providers } from "./providers";
-import { Header } from "@/components/layout/Header";
-import { Toaster } from 'sonner';
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Providers } from './providers'
+import { Header } from '@/components/layout/Header'
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "LaunchPad - Raise faster, Iterate quicker",
-  description: "The On-Chain Operating System for Startup Creation. Connect verified founders, democratised capital, and global talent.",
-};
+  title: 'LaunchPad — Raise faster, iterate quicker',
+  description: 'The on-chain operating system for startup creation.',
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en" className="h-full">
+      <body className={`${inter.className} min-h-full bg-slate-50`}>
         <Providers>
           <Header />
-          <main className="min-h-screen">
-            {children}
-          </main>
-          <Toaster position="top-center" />
+          <main>{children}</main>
         </Providers>
       </body>
     </html>
-  );
+  )
 }
