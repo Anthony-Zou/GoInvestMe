@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs -I {} basename {})",
+      "Bash(grep -r \"export\\\\|import\" /Users/zouzeren/workspace/gim/frontend/src/lib/*.ts)"
+    ]
+  }
+}

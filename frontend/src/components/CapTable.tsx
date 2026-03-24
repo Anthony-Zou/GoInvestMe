@@ -80,7 +80,7 @@ export function CapTable({ teamMembers }: CapTableProps) {
                             cx="50%"
                             cy="50%"
                             labelLine={false}
-                            label={(entry: any) => `${entry.name}: ${entry.equity.toFixed(1)}%`}
+                            label={({ name, equity }) => `${name}: ${equity.toFixed(1)}%`}
                             outerRadius={80}
                             fill="#8884d8"
                             dataKey="equity"
@@ -89,7 +89,7 @@ export function CapTable({ teamMembers }: CapTableProps) {
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                         </Pie>
-                        <Tooltip formatter={(value: number | undefined) => value ? `${value.toFixed(2)}%` : '0%'} />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
